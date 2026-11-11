@@ -6,8 +6,16 @@
 // honest Phase 1 values: no account is signed in (guest, authenticated:
 // false), no summary/finish-type data is loaded yet, and the material
 // snapshot itself comes from /api/materials (see web/web-erp.js).
-// Plain Node req/res only — no framework, works on Vercel and locally.
+//
+// Phase 2-lite: if the request carries a valid admin session token
+// (`Authorization: Bearer <token>`, issued by POST /api/login), the
+// response carries the main-admin access object and authenticated: true
+// instead of the guest response. Any other token (or none) gets exactly
+// the guest response. Plain Node req/res only — no framework, works on
+// Vercel and locally.
 "use strict";
+
+const auth = require("./_auth.cjs");
 
 const DEPARTMENTS = [
   "Circular Knitting",
@@ -44,6 +52,21 @@ module.exports = (req, res) => {
     res.end("Method Not Allowed");
     return;
   }
+  // Phase 2-lite admin session: a valid Bearer token upgrades this
+  // response from guest to the main-admin access object. Anything else
+  // (no token, bad signature, expired) stays guest — silently.
+  let authenticated = false;
+  let access = GUEST_ACCESS;
+  const header = String((req.headers && req.headers.authorization) || "");
+  const match = /^Bearer\s+(.+)$/.exec(header);
+  if (match) {
+    const config = auth.loadAdminConfig();
+    const username = auth.verifyToken(match[1].trim(), config.secret);
+    if (username && username.toLowerCase() === config.username) {
+      authenticated = true;
+      access = auth.adminAccess();
+    }
+  }
   sendJson(res, 200, {
     appVersion: "1.0.1",
     phase: 1,
@@ -64,12 +87,12 @@ module.exports = (req, res) => {
       },
       updatedAt: null,
     },
-    access: GUEST_ACCESS,
+    access,
     departments: DEPARTMENTS,
     departmentStatuses: {},
     departmentFiles: [],
     usageAnalytics: [],
-    authenticated: false,
+    authenticated,
     profileImageDataUrl: "",
     codeRequirementPreview: { rows: [], file: "", sheetName: "" },
     materialsSource: {

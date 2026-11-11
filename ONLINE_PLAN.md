@@ -133,10 +133,13 @@ zbom.vercel.app — see "Live fixes" below. Re-verify after this fix:**
 Everything below shows the UI but does nothing real, or is disabled. This
 is deliberate — each needs a database (Phase 2).
 
-- **Sign-in / accounts**: Guest only. `adminLogin`, `registerAccount`,
-  `changeOwnPassword`, `setAdminPassword`, saved accounts — all return
-  `{ok:false, message:"অনলাইন লগইন Phase 2-এ আসছে (ডেটাবেস লাগবে)"}`.
-  No passwords, no invented accounts anywhere in Phase 1 code.
+- **Sign-in / accounts**: Guest only in Phase 1; since Phase 2-lite the
+  single env-var admin can sign in (`adminLogin` → `POST /api/login`,
+  30-minute token). `registerAccount`, `changeOwnPassword`,
+  `setAdminPassword` still return `{ok:false}` — the online admin
+  password is changed in Vercel (`ZBOM_ADMIN_PASSWORD_HASH`), not in
+  the app; other users still need the full Phase 2 database below.
+  No passwords, no invented accounts anywhere in the code.
 - **Circular Knitting summary + Dia Wise Summary**: no data loaded (0 rows).
 - **Finish Type Short Name**: no data loaded (0 rows).
 - **Code Requirement preview**: empty.
@@ -160,6 +163,67 @@ is deliberate — each needs a database (Phase 2).
   safe no-ops online.
 - **Overview counts**: material count shows the true total (103,710)
   after a search; summary / finish-type counts are 0 (no data yet).
+
+## Phase 2-lite — Vercel env-var admin login (DONE, uncommitted)
+
+One admin can now sign in on the website — no database needed. The admin
+account is configured by Vercel environment variables; the password hash
+uses the desktop format exactly (PBKDF2-SHA256, 150,000 iterations,
+32-byte key — see `desktop-client/main.cjs` `hashPassword`).
+
+### Env vars (Vercel Project Settings → Environment Variables)
+
+| Name | Value format |
+|---|---|
+| `ZBOM_ADMIN_USERNAME` | Admin username, e.g. `31001625` (default if unset: `31001625`; compared case-insensitively) |
+| `ZBOM_ADMIN_PASSWORD_HASH` | JSON `{"salt":"<32 hex chars>","hash":"<64 hex chars>"}` — generate with `node scripts/make-admin-hash.cjs` (reads the password from stdin with echo off, never from argv, never writes it anywhere) |
+| `ZBOM_SESSION_SECRET` | Any long random string (token signing — keep it secret, never commit it) |
+
+After adding/changing them: **redeploy** in Vercel (Deployments → ⋯ →
+Redeploy), because serverless functions read env vars at deploy time.
+
+### What was built
+
+- `api/_auth.cjs` — shared helpers (underscore-prefixed, so Vercel does
+  not treat it as a function): PBKDF2 verification with
+  `timingSafeEqual`, HMAC-SHA256 session tokens
+  (`base64url(payload).base64url(signature)`, payload `{u, role:
+  "main_admin", exp}`, 30-minute expiry like desktop
+  `SESSION_TIMEOUT_MS`), and the main-admin access object (username
+  `31001625`, full name "Zakaria Alam Mithu", designation "CTM", all 6
+  departments, the `main_admin` permission set copied from desktop
+  `ROLE_PERMISSIONS`). Missing/malformed env vars make verification
+  always fail — never crash, never accept.
+- `api/login.js` — `POST /api/login` `{username, password}` → on success
+  `200 {ok:true, token, access}`; wrong username, wrong password, or
+  unset env vars all return the same `401 {ok:false, message:
+  "Incorrect username or password."}` (never says which field failed).
+- `api/state.js` — reads `Authorization: Bearer <token>`; a valid token
+  returns `authenticated: true` with the main-admin access object,
+  anything else returns exactly the guest response.
+- `web/web-erp.js` — real `adminLogin` (POST `/api/login`, token kept in
+  `sessionStorage` as `zbom-online-token`, sent on later `/api/state`
+  calls, cleared on 401); `getState`/`getAccessState` now trust the
+  server's `authenticated`/`access` instead of always returning guest;
+  `logout` clears the token; `changeOwnPassword`/`setAdminPassword`
+  return `{ok:false}` with the message that the online admin password
+  cannot be changed from inside the app — change
+  `ZBOM_ADMIN_PASSWORD_HASH` in Vercel and redeploy. `registerAccount`
+  still returns the Phase 2 (Supabase) message.
+- `scripts/make-admin-hash.cjs` — generates the hash JSON (see above).
+- No password or hash value is stored in any repo file.
+
+### Limits (honest)
+
+- **Single admin only** — no other users, no sign-up, no sub-admins.
+- **No in-app password change** — the password lives in a Vercel env
+  var, so changing it means generating a new hash and redeploying.
+- The desktop admin password (LAN share `ZBOM-Admin/access.json`) is
+  **separate** — changing one does not change the other.
+- Everything else from "What does NOT work online yet" still applies:
+  master uploads, ZKNG/LSMW/Routing/Characteristics generation, Circular
+  Knitting summary, Finish Type, Code Requirement, departments,
+  administration — those still need the full Phase 2 database below.
 
 ## Phase 2 — full online system (needs a database)
 

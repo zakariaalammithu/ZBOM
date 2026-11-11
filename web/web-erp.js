@@ -9,6 +9,12 @@
 //   - getState / getAccessState / update — guest state from /api/state,
 //     plus the first 50 rows of the real Fabric Material master from
 //     /api/materials (full server-side search is wired by web-online.js).
+//   - adminLogin — REAL since Phase 2-lite (see ONLINE_PLAN.md): POST
+//     /api/login checks the ONE admin account configured by Vercel env
+//     vars (ZBOM_ADMIN_USERNAME / ZBOM_ADMIN_PASSWORD_HASH /
+//     ZBOM_SESSION_SECRET). On success the 30-minute session token is
+//     kept in sessionStorage and sent as `Authorization: Bearer <token>`;
+//     getState/getAccessState then return the main-admin access object.
 //   - getZkngState / getLsmwBomState / getRoutingState /
 //     getCharacteristicsState — empty-but-valid states matching the shapes
 //     renderer.js expects (see desktop main.cjs get-*-state handlers).
@@ -23,11 +29,14 @@
 //   - saveSettings — echoes the settings back (no server settings store yet).
 //   - recordUsage / accountHeartbeat — { ok: true } (desktop stubs too).
 //
-// What is HONESTLY NOT built (Phase 2 needs a database — see
+// What is HONESTLY NOT built (full Phase 2 needs a database — see
 // ONLINE_PLAN.md):
-//   - adminLogin / registerAccount / changeOwnPassword / setAdminPassword —
-//     they return { ok: false } with a Phase 2 message. There are NO
-//     hardcoded passwords and NO invented accounts anywhere in this file.
+//   - registerAccount / changeOwnPassword / setAdminPassword — the online
+//     admin password cannot be changed from inside the app: it lives in
+//     the Vercel env var ZBOM_ADMIN_PASSWORD_HASH, so it is changed in
+//     Vercel and redeployed. There are NO hardcoded passwords and NO
+//     invented accounts anywhere in this file, and only the single env-var
+//     admin account can sign in (no other users yet).
 //   - All master uploads, material imports, ZKNG / LSMW BOM / Routing /
 //     Characteristics generation and downloads, department files, sub-admin
 //     and role management — { ok: false } with a Phase 2 message.
@@ -45,15 +54,79 @@
   var PHASE2_FEATURE =
     "এই কাজটি অনলাইনে এখনো আসেনি — Phase 2-এ আসছে (ডেটাবেস লাগবে)।";
   var DESKTOP_ONLY = "এই কাজটি শুধু ডেস্কটপ অ্যাপে হয়, অনলাইনে উপলব্ধ নয়।";
+  var PASSWORD_CHANGE_MESSAGE =
+    "অনলাইন অ্যাডমিন পাসওয়ার্ড অ্যাপ থেকে বদলানো যায় না — Vercel-এ ZBOM_ADMIN_PASSWORD_HASH বদলে আবার ডেপ্লয় করতে হবে।";
+  var TOKEN_KEY = "zbom-online-token";
 
   function notAvailable(message) {
     return { ok: false, message: message || PHASE2_FEATURE };
   }
 
+  // Session token storage. sessionStorage is per-tab and disappears when
+  // the tab closes — the right scope for a 30-minute admin session.
+  // Guarded: some sandboxes have no sessionStorage at all.
+  function getToken() {
+    try {
+      return window.sessionStorage ? window.sessionStorage.getItem(TOKEN_KEY) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function setToken(token) {
+    try {
+      if (window.sessionStorage) window.sessionStorage.setItem(TOKEN_KEY, token);
+    } catch (error) {
+      // Storage unavailable — the login still succeeds, the session just
+      // will not survive a reload.
+    }
+  }
+
+  function clearToken() {
+    try {
+      if (window.sessionStorage) window.sessionStorage.removeItem(TOKEN_KEY);
+    } catch (error) {
+      // Nothing to clear.
+    }
+  }
+
+  function authHeaders() {
+    var headers = { Accept: "application/json" };
+    var token = getToken();
+    if (token) headers.Authorization = "Bearer " + token;
+    return headers;
+  }
+
   async function apiJson(path) {
-    var res = await fetch(path, { headers: { Accept: "application/json" } });
+    var res = await fetch(path, { headers: authHeaders() });
+    if (res.status === 401) {
+      // Session expired or revoked server-side: drop the stale token so
+      // the next call goes out as guest instead of retrying it forever.
+      clearToken();
+      throw new Error("Request failed: 401 " + path);
+    }
     if (!res.ok) throw new Error("Request failed: " + res.status + " " + path);
     return res.json();
+  }
+
+  // POST helper that returns the parsed body even on a 4xx, because the
+  // login endpoint answers failures with a JSON { ok: false, message }.
+  async function apiPostJson(path, payload) {
+    var res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    var data = null;
+    try {
+      data = await res.json();
+    } catch (error) {
+      data = null;
+    }
+    if (!data || typeof data !== "object") {
+      return { ok: false, message: "Sign in failed: " + res.status };
+    }
+    return data;
   }
 
   function guestAccess() {
@@ -104,16 +177,20 @@
     var snapshot = emptySnapshot();
     snapshot.materials = materials;
     snapshot.sources = (meta.snapshot && meta.snapshot.sources) || snapshot.sources;
+    // Phase 2-lite: /api/state returns the main-admin access object when
+    // the session token is valid; otherwise it returns guest. Trust the
+    // server's answer — never upgrade the role in the browser.
+    var authenticated = Boolean(meta.authenticated);
     return {
       config: meta.config || {},
       snapshot: snapshot,
       appVersion: meta.appVersion || "1.0.1",
-      access: guestAccess(),
+      access: authenticated && meta.access ? meta.access : guestAccess(),
       departments: meta.departments || [],
       departmentStatuses: {},
       departmentFiles: [],
       usageAnalytics: [],
-      authenticated: false,
+      authenticated: authenticated,
       profileImageDataUrl: "",
       codeRequirementPreview: { rows: [], file: "", sheetName: "" },
     };
@@ -121,13 +198,14 @@
 
   async function getAccessState() {
     var meta = await apiJson("/api/state");
+    var authenticated = Boolean(meta.authenticated);
     return {
-      access: guestAccess(),
+      access: authenticated && meta.access ? meta.access : guestAccess(),
       departments: meta.departments || [],
       departmentStatuses: {},
       departmentFiles: [],
       usageAnalytics: [],
-      authenticated: false,
+      authenticated: authenticated,
       profileImageDataUrl: "",
     };
   }
@@ -237,12 +315,31 @@
     recordUsage: async function () { return { ok: true }; },
     accountHeartbeat: async function () { return { ok: true }; },
 
-    // ---- auth: NOT built in Phase 1 — no passwords, no invented accounts ----
-    adminLogin: async function () { return notAvailable(PHASE2_LOGIN); },
+    // ---- auth: real single-admin login since Phase 2-lite ----
+    // renderer.js calls adminLogin({ username, password, remember }) and
+    // expects { ok, access, message } — same shape as the desktop handler.
+    // On success the session token is kept in sessionStorage; getState /
+    // getAccessState then return the main-admin access object.
+    adminLogin: async function (payload) {
+      var result;
+      try {
+        result = await apiPostJson("/api/login", {
+          username: (payload && payload.username) || "",
+          password: (payload && payload.password) || "",
+        });
+      } catch (error) {
+        return { ok: false, message: "অনলাইনে সাইন ইন করা যায়নি — পরে আবার চেষ্টা করুন।" };
+      }
+      if (result.ok && result.token) setToken(result.token);
+      return result;
+    },
     registerAccount: async function () { return notAvailable(PHASE2_LOGIN); },
-    logout: async function () { return { ok: true, message: "Signed out (Guest view)." }; },
-    changeOwnPassword: async function () { return notAvailable(PHASE2_LOGIN); },
-    setAdminPassword: async function () { return notAvailable(PHASE2_LOGIN); },
+    logout: async function () {
+      clearToken();
+      return { ok: true, message: "Signed out (Guest view)." };
+    },
+    changeOwnPassword: async function () { return notAvailable(PASSWORD_CHANGE_MESSAGE); },
+    setAdminPassword: async function () { return notAvailable(PASSWORD_CHANGE_MESSAGE); },
     getRememberedLogin: async function () { return { savedAccounts: [], lastSelectedUsername: "" }; },
     getSavedAccounts: async function () { return { savedAccounts: [], lastSelectedUsername: "" }; },
     saveAccountLocally: async function () { return notAvailable(PHASE2_LOGIN); },
