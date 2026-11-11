@@ -1,0 +1,19 @@
+# Files Vercel must NOT deploy as public static assets.
+# The repo root holds the real master workbooks (10+ MB of business data)
+# and desktop-client/ holds the Electron app — including its renderer
+# fallback stub, which fabricates a signed-in admin with no login.
+# None of that may be reachable from the deployed site.
+# data/materials-index.json is excluded here too, but is still bundled
+# INTO the api/materials.js function via vercel.json `includeFiles`, so
+# the API can read it while browsers cannot download it directly.
+# VERIFY on the first Vercel deploy: GET /api/materials?q= must return
+# rows. If it 500s with "materials index could not be loaded", the
+# includeFiles + .vercelignore interaction needs revisiting.
+desktop-client
+Fabric Material code-.xlsx
+All Grey Material Code.xlsx
+Circular Knitting.xls
+Code UPload file
+LSMW BOM Upload file
+Routing
+data

@@ -1,0 +1,1 @@
+{"dependencies":{"xlsx":"0.18.5"},"description":"ZBOM Phase 1 online scaffold: web UI in web/ + Vercel serverless API in api/ over the Fabric Material master. The Electron desktop app in desktop-client/ is untouched.","name":"zbom-online","private":true,"scripts":{"build-index":"node scripts/build-materials-index.cjs"},"version":"1.0.1"}
