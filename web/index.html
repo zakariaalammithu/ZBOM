@@ -414,7 +414,7 @@
         </label>
       </div>
       <label>Employee ID / Username<input id="adminLoginUsername" autocomplete="username" placeholder="Enter employee ID"></label>
-      <label>Password<input type="password" id="adminLoginPassword" autocomplete="current-password" placeholder="Enter password"></label>
+      <label>Password<div class="password-input"><input type="password" id="adminLoginPassword" autocomplete="current-password" placeholder="Enter password"><button type="button" class="toggle-password" data-password-target="adminLoginPassword" title="Show password" aria-label="Show password">◉</button></div></label>
       <label class="remember-login"><input type="checkbox" id="rememberLogin" checked> Save login &amp; password on this computer for quick access</label>
       <small>Your last successful Employee ID is saved on this computer. Password is protected by Windows encryption.</small>
       <small class="login-error hidden" id="adminLoginError"></small>
