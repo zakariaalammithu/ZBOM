@@ -10,11 +10,19 @@
 // Performance: parsing the 10.3 MB .xlsx with the xlsx library takes
 // ~12 s and ~800 MB RSS, which exceeds a Vercel Hobby cold start
 // (10 s / 1024 MB). So this function reads the pre-extracted compact
-// index data/materials-index.json instead (17.1 MB, columns listed once,
-// rows as arrays — see scripts/build-materials-index.cjs). First load
-// parses it in ~0.2 s; the parsed index is cached in module scope, so
-// warm invocations only pay the ~0.1-0.3 s search. Re-run
-// `npm run build-index` after the master workbook changes.
+// index in data/materials-index-*.json instead (4 chunks of ~26k rows,
+// ~4.3 MB each, columns listed once, rows as arrays — see
+// scripts/build-materials-index.cjs). First load parses them in ~0.2 s;
+// the parsed index is cached in module scope, so warm invocations only
+// pay the ~0.1-0.3 s search. Re-run `npm run build-index` after the
+// master workbook changes.
+//
+// Why chunks: the single 17.1 MB index file would not push to GitHub —
+// the SSH proxy tunnel broke with "Broken pipe" on every attempt
+// containing it. The loader below reads EVERY chunk file it finds, so a
+// partial upload still serves the rows it has, and it fails with a clear
+// 500 ("materials index is not fully uploaded yet") if no chunk is
+// present at all, instead of crashing.
 //
 // Plain Node req/res only — no framework, works on Vercel and locally.
 // The index file reaches Vercel via vercel.json `functions.includeFiles`
@@ -24,22 +32,71 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const INDEX_PATH = path.join(__dirname, "..", "data", "materials-index.json");
+const INDEX_DIR = path.join(__dirname, "..", "data");
+const CHUNK_FILE = /^materials-index-(\d+)\.json$/;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
-let cache = null; // { columns, rows, searchText, generatedAt, sourceRows }
+let cache = null; // { columns, rows, searchText, generatedAt, sourceRows, chunksLoaded }
 
 function loadIndex() {
   if (cache) return cache;
-  const parsed = JSON.parse(fs.readFileSync(INDEX_PATH, "utf8"));
+  let files = [];
+  try {
+    files = fs
+      .readdirSync(INDEX_DIR)
+      .filter((name) => CHUNK_FILE.test(name))
+      .sort((a, b) => Number(a.match(CHUNK_FILE)[1]) - Number(b.match(CHUNK_FILE)[1]));
+  } catch (error) {
+    throw new Error(`materials index is not fully uploaded yet (could not read index directory: ${error.message})`);
+  }
+  if (files.length === 0) {
+    throw new Error("materials index is not fully uploaded yet (no data/materials-index-*.json chunk found)");
+  }
+
+  // Load every chunk present, in chunk-number order, and concatenate rows.
+  // A partial upload still serves the rows it has; a chunk that fails to
+  // parse is skipped, not fatal — but zero rows overall is an error.
+  let columns = null;
+  let generatedAt = null;
+  let sourceRows = 0;
+  const rows = [];
+  let loaded = 0;
+  for (const file of files) {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(path.join(INDEX_DIR, file), "utf8"));
+    } catch (error) {
+      console.error(`materials index: skipping unreadable chunk ${file}: ${error.message}`);
+      continue;
+    }
+    if (!Array.isArray(parsed.rows)) {
+      console.error(`materials index: skipping chunk ${file}: no rows array`);
+      continue;
+    }
+    if (!columns) {
+      columns = parsed.columns;
+      generatedAt = parsed.generatedAt;
+    }
+    sourceRows = parsed.sourceRows || sourceRows;
+    rows.push(...parsed.rows);
+    loaded += 1;
+  }
+  if (rows.length === 0) {
+    throw new Error(`materials index is not fully uploaded yet (found ${files.length} chunk file(s), loaded 0 rows)`);
+  }
+  if (loaded < files.length) {
+    console.error(`materials index: loaded ${loaded} of ${files.length} chunk file(s)`);
+  }
+
   cache = {
-    columns: parsed.columns,
-    rows: parsed.rows,
-    generatedAt: parsed.generatedAt,
-    sourceRows: parsed.sourceRows,
+    columns,
+    rows,
+    generatedAt,
+    sourceRows,
+    chunksLoaded: loaded,
     // One lowercase searchable string per row, built once.
-    searchText: parsed.rows.map((row) =>
+    searchText: rows.map((row) =>
       row.map((value) => String(value ?? "")).join(" ").toLowerCase(),
     ),
   };
@@ -74,10 +131,17 @@ module.exports = (req, res) => {
   try {
     index = loadIndex();
   } catch (error) {
-    sendJson(res, 500, {
-      error: "materials index could not be loaded",
-      detail: String(error && error.message ? error.message : error),
-    });
+    const message = String(error && error.message ? error.message : error);
+    // The "not fully uploaded yet" case gets its own clear error message;
+    // anything else keeps the generic one with the detail attached.
+    if (message.startsWith("materials index is not fully uploaded yet")) {
+      sendJson(res, 500, { error: message });
+    } else {
+      sendJson(res, 500, {
+        error: "materials index could not be loaded",
+        detail: message,
+      });
+    }
     return;
   }
 

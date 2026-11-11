@@ -10,11 +10,21 @@
 //   npm run build-index
 //
 // Source:  ../Fabric Material code-.xlsx  (sheet "Mastar file")
-// Output:  ../data/materials-index.json   { generatedAt, sourceFile,
-//            sourceRows, columns, rows: [...] }
+// Output:  ../data/materials-index-1.json ... -4.json
+//          { generatedAt, sourceFile, sourceSheet, sourceRows, columns,
+//            rows, chunk, chunks }
 // The index is read by api/materials.js (via vercel.json `includeFiles`).
 // It is NOT copied into web/ and must not be served as a static file
 // (see .vercelignore) — the API only ever returns <= 100 rows per call.
+//
+// Why chunks, not one file: the single 17.1 MB index
+// (data/materials-index.json) would not push to GitHub — the SSH proxy
+// tunnel broke with "Broken pipe" on every attempt containing that file,
+// while code-only pushes went through fine. So the index is split into
+// 4 chunks of ~26k rows (~4.3 MB each), committed and pushed one at a
+// time. api/materials.js loads every data/materials-index-*.json chunk
+// it finds, so a partial upload still works (and reports clearly if no
+// chunk is present at all).
 "use strict";
 
 const fs = require("node:fs");
@@ -23,7 +33,8 @@ const XLSX = require("xlsx");
 
 const SOURCE = path.join(__dirname, "..", "Fabric Material code-.xlsx");
 const SHEET = "Mastar file";
-const OUT = path.join(__dirname, "..", "data", "materials-index.json");
+const CHUNKS = 4;
+const OUT_DIR = path.join(__dirname, "..", "data");
 
 function main() {
   const started = Date.now();
@@ -33,20 +44,38 @@ function main() {
   const objects = XLSX.utils.sheet_to_json(sheet, { defval: "" });
   const columns = objects.length ? Object.keys(objects[0]) : [];
   const rows = objects.map((row) => columns.map((column) => row[column] ?? ""));
-  const index = {
-    generatedAt: new Date().toISOString(),
-    sourceFile: path.basename(SOURCE),
-    sourceSheet: SHEET,
-    sourceRows: objects.length,
-    columns,
-    rows,
-  };
-  fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, JSON.stringify(index));
-  const bytes = fs.statSync(OUT).size;
+  const generatedAt = new Date().toISOString();
+  const chunkSize = Math.ceil(rows.length / CHUNKS);
+
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  // Remove any stale chunk files (e.g. from a previous run with a
+  // different chunk count) so the API never loads leftovers.
+  for (const stale of fs.readdirSync(OUT_DIR)) {
+    if (/^materials-index-\d+\.json$/.test(stale)) fs.unlinkSync(path.join(OUT_DIR, stale));
+  }
+
+  let totalBytes = 0;
+  for (let i = 0; i < CHUNKS; i++) {
+    const chunkRows = rows.slice(i * chunkSize, (i + 1) * chunkSize);
+    const out = path.join(OUT_DIR, `materials-index-${i + 1}.json`);
+    const chunk = {
+      generatedAt,
+      sourceFile: path.basename(SOURCE),
+      sourceSheet: SHEET,
+      sourceRows: objects.length,
+      columns,
+      rows: chunkRows,
+      chunk: i + 1,
+      chunks: CHUNKS,
+    };
+    fs.writeFileSync(out, JSON.stringify(chunk));
+    const bytes = fs.statSync(out).size;
+    totalBytes += bytes;
+    console.log(`chunk ${i + 1}/${CHUNKS}: ${chunkRows.length} rows -> ${out} (${(bytes / 1048576).toFixed(1)} MB)`);
+  }
   console.log(`rows: ${objects.length}`);
   console.log(`columns: ${columns.length} (${columns.join(" | ")})`);
-  console.log(`index: ${OUT} (${(bytes / 1048576).toFixed(1)} MB) in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  console.log(`index: ${CHUNKS} chunks, ${(totalBytes / 1048576).toFixed(1)} MB total, in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 }
 
 main();

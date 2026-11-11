@@ -3,9 +3,9 @@
 # and desktop-client/ holds the Electron app — including its renderer
 # fallback stub, which fabricates a signed-in admin with no login.
 # None of that may be reachable from the deployed site.
-# data/materials-index.json is excluded here too, but is still bundled
+# data/materials-index-*.json are excluded here too, but are still bundled
 # INTO the api/materials.js function via vercel.json `includeFiles`, so
-# the API can read it while browsers cannot download it directly.
+# the API can read them while browsers cannot download them directly.
 # VERIFY on the first Vercel deploy: GET /api/materials?q= must return
 # rows. If it 500s with "materials index could not be loaded", the
 # includeFiles + .vercelignore interaction needs revisiting.

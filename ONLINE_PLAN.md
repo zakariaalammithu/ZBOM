@@ -30,11 +30,22 @@ It is NOT the full online system.
   substring search across all 17 columns of the Fabric Material master
   (103,710 rows), returns at most `limit` rows (default 50, max 100) +
   the true total. The full master is never sent to the browser.
-- `data/materials-index.json` (17.1 MB) — pre-extracted compact index
-  (columns once, rows as arrays). Regenerate with `npm run build-index`
+- `data/materials-index-1.json` … `-4.json` (4 chunks, ~4.0–4.5 MB
+  each, 17.1 MB total) — pre-extracted compact index (columns once, rows
+  as arrays, 103,710 rows). Regenerate with `npm run build-index`
   (`scripts/build-materials-index.cjs`) after the master workbook changes.
+  **Why chunks, not one file:** the single 17.1 MB `materials-index.json`
+  would not push to GitHub — the SSH proxy tunnel broke with "Broken
+  pipe" on every attempt containing that file (6 failures), while the
+  code-only push went through fine. So the index is split into 4 chunks
+  of ~26k rows each, committed and pushed one chunk per commit.
+  `api/materials.js` globs `data/materials-index-*.json` and concatenates
+  the rows, so a partial upload still serves the rows it has; with no
+  chunk at all it returns a clear 500 ("materials index is not fully
+  uploaded yet").
 - `vercel.json` — `/` → `/web/index.html`; `api/materials.js` bundles
-  `data/materials-index.json` via `includeFiles`. No framework, plain Node.
+  `data/materials-index-*.json` (glob) via `includeFiles`. No framework,
+  plain Node.
 - `.vercelignore` — keeps the real masters, `desktop-client/` and `data/`
   out of the public static deployment (otherwise anyone could download the
   master workbooks, and the desktop renderer's fake-admin stub would be
@@ -47,8 +58,9 @@ It is NOT the full online system.
 - Parsing `Fabric Material code-.xlsx` (10.3 MB) with `xlsx` 0.18.5 takes
   **~11.6 s and ~818 MB RSS** — beyond a Vercel Hobby cold start
   (10 s / 1024 MB). Full-row JSON would be 46.6 MB.
-- The array index (17.1 MB) parses in **~0.2 s**; warm searches take
-  **~0.1–0.3 s**. First load is cached in the function's module scope.
+- The array index (17.1 MB, split into 4 chunks of ~4.0–4.5 MB) parses
+  in **~0.2 s**; warm searches take **~0.1–0.3 s**. First load is cached
+  in the function's module scope.
 - Local verification (see "Verified locally" below) ran the same code the
   Vercel functions use.
 
@@ -71,16 +83,28 @@ It is NOT the full online system.
     **479 ms, RSS 187 MB** — inside Vercel Hobby limits (10 s / 1024 MB).
     Warm search: **~34 ms**. The raw `.xlsx` parse it replaces took
     ~11.6 s / ~818 MB RSS.
+  - Chunked-index re-verification (2026-11-11, after splitting into 4
+    chunks): mock req/res test against the chunk files — `q=TERRY` →
+    3,985 total (first row Grey Material `1400000000`),
+    `q=1400000001` → 1, `q=zzzz-no-match` → 0, empty `q` → 103,710,
+    lowercase `q=terry` → same 3,985 — all pass, cold load 549 ms.
+    Edge cases: no chunk file at all → 500 "materials index is not fully
+    uploaded yet"; only chunk 1 present → 200 with 25,928 rows (partial
+    upload still serves what it has).
 - `git status`: **no modifications under `desktop-client/`** — the desktop
   app is untouched. Everything new is uncommitted (no commit, no push).
 
 ### ⚠️ Verify on the FIRST Vercel deploy
 
 1. `GET /api/materials?q=TERRY` must return rows. If it 500s with
-   "materials index could not be loaded", the `includeFiles` +
-   `.vercelignore` interaction needs revisiting (fallback: remove `data`
-   from `.vercelignore` — but then the index becomes publicly downloadable
-   at `/data/materials-index.json`, a data-exposure tradeoff to decide then).
+   "materials index is not fully uploaded yet", a chunk file is missing
+   from the deployment (check the Deployments file list for
+   `data/materials-index-*.json`); if it 500s with "materials index
+   could not be loaded", the `includeFiles` + `.vercelignore` interaction
+   needs revisiting (fallback: remove `data` from `.vercelignore` — but
+   then the index becomes publicly downloadable at
+   `/data/materials-index-*.json`, a data-exposure tradeoff to decide
+   then).
 2. Open the deployed site and type a material code in the search box —
    results must come from the server (total > 50 proves it).
 
