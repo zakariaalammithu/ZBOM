@@ -45,9 +45,16 @@ function readPasswordLine(prompt) {
           process.exit(1);
         }
         if (byte === 0x7f) {
-          input = input.slice(0, -1);
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            // Erase one "*" from the screen (TTY only).
+            if (stdin.isTTY) process.stdout.write("\b \b");
+          }
         } else if (byte >= 0x20) {
           input += String.fromCharCode(byte);
+          // Show one "*" per typed character so the user can see that
+          // typing works. The password itself is never shown.
+          if (stdin.isTTY) process.stdout.write("*");
         }
       }
     };
