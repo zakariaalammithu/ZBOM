@@ -30,7 +30,7 @@ It is NOT the full online system.
   substring search across all 17 columns of the Fabric Material master
   (103,710 rows), returns at most `limit` rows (default 50, max 100) +
   the true total. The full master is never sent to the browser.
-- `data/materials-index-1.json` … `-4.json` (4 chunks, ~4.0–4.5 MB
+- `api/materials-data/materials-index-1.json` … `-4.json` (4 chunks, ~4.0–4.5 MB
   each, 17.1 MB total) — pre-extracted compact index (columns once, rows
   as arrays, 103,710 rows). Regenerate with `npm run build-index`
   (`scripts/build-materials-index.cjs`) after the master workbook changes.
@@ -39,14 +39,14 @@ It is NOT the full online system.
   pipe" on every attempt containing that file (6 failures), while the
   code-only push went through fine. So the index is split into 4 chunks
   of ~26k rows each, committed and pushed one chunk per commit.
-  `api/materials.js` globs `data/materials-index-*.json` and concatenates
+  `api/materials.js` globs `api/materials-data/materials-index-*.json` and concatenates
   the rows, so a partial upload still serves the rows it has; with no
   chunk at all it returns a clear 500 ("materials index is not fully
   uploaded yet").
 - `vercel.json` — `/` → `/web/index.html`; `api/materials.js` bundles
-  `data/materials-index-*.json` (glob) via `includeFiles`. No framework,
+  `api/materials-data/materials-index-*.json` (glob) via `includeFiles`. No framework,
   plain Node.
-- `.vercelignore` — keeps the real masters, `desktop-client/` and `data/`
+- `.vercelignore` — keeps the real masters and `desktop-client/`
   out of the public static deployment (otherwise anyone could download the
   master workbooks, and the desktop renderer's fake-admin stub would be
   reachable on the web).
@@ -96,17 +96,37 @@ It is NOT the full online system.
 
 ### ⚠️ Verify on the FIRST Vercel deploy
 
+**Fixed 2026-11-11 (after the first live check failed): two bugs found on
+zbom.vercel.app — see "Live fixes" below. Re-verify after this fix:**
 1. `GET /api/materials?q=TERRY` must return rows. If it 500s with
    "materials index is not fully uploaded yet", a chunk file is missing
    from the deployment (check the Deployments file list for
-   `data/materials-index-*.json`); if it 500s with "materials index
-   could not be loaded", the `includeFiles` + `.vercelignore` interaction
-   needs revisiting (fallback: remove `data` from `.vercelignore` — but
-   then the index becomes publicly downloadable at
-   `/data/materials-index-*.json`, a data-exposure tradeoff to decide
-   then).
-2. Open the deployed site and type a material code in the search box —
-   results must come from the server (total > 50 proves it).
+   `api/materials-data/materials-index-*.json`).
+2. Open the deployed site — it must look styled (blue sidebar, cards),
+   not plain unstyled text. If it is unstyled, an asset path is wrong
+   again (check the browser console for 404s).
+3. Type a material code in the search box — results must come from the
+   server (total > 50 proves it).
+
+### Live fixes (2026-11-11, after the user sent a screenshot of zbom.vercel.app)
+
+1. **Unstyled page — relative asset paths.** `web/index.html` used
+   relative paths (`styles.css`, `renderer.js`, `web-erp.js`,
+   `web-online.js`, `assets/zcode.ico`), but Vercel serves it at `/`
+   via a rewrite, so the browser asked for `/styles.css`, `/renderer.js`
+   etc. — all 404. Without CSS every normally-hidden element showed at
+   once, which is exactly the mess in the screenshot. Fixed: all refs
+   are now absolute under `/web/` (`/web/styles.css`, `/web/renderer.js`,
+   `/web/web-erp.js`, `/web/web-online.js`, `/web/assets/zcode.ico`).
+2. **`/api/materials` 500 — index never bundled.** Live error was
+   `ENOENT: scandir '/var/task/data'`: `.vercelignore` excluded `data/`,
+   so `includeFiles` never bundled the chunks. Fixed: chunks moved to
+   `api/materials-data/` (files under `api/` are bundled into the
+   function but never served as public static files), `api/materials.js`
+   now reads `path.join(__dirname, "materials-data")`, the builder
+   writes there, `vercel.json` `includeFiles` is
+   `api/materials-data/materials-index-*.json`, and the `data` line is
+   gone from `.vercelignore`. Do not move the chunks back to `data/`.
 
 ## What does NOT work online yet (Phase 1)
 

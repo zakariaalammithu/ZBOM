@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ZBOM</title>
-  <link rel="icon" type="image/x-icon" href="assets/zcode.ico">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/x-icon" href="/web/assets/zcode.ico">
+  <link rel="stylesheet" href="/web/styles.css">
   <style>
     .routing-download-card{grid-template-columns:110px minmax(260px,1fr) minmax(205px,auto);overflow:visible}
     .routing-download-card>div:nth-child(2){min-width:0;overflow:visible}
@@ -17,7 +17,7 @@
 <body>
   <div class="app">
     <aside>
-      <div class="brand"><img src="assets/zcode.ico" alt="ZBOM logo" id="brandLogo"><span><strong>ZBOM</strong><small>ZBOM</small></span></div>
+      <div class="brand"><img src="/web/assets/zcode.ico" alt="ZBOM logo" id="brandLogo"><span><strong>ZBOM</strong><small>ZBOM</small></span></div>
       <nav>
         <button data-view="dashboard" class="active"><i>⌂</i> Overview</button>
         <small class="nav-group">DATA MODULES</small>
@@ -402,7 +402,7 @@
   </div>
   <div class="admin-login-overlay hidden" id="adminLoginOverlay">
     <div class="admin-login-card">
-      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <img class="login-logo" src="/web/assets/zcode.ico" alt="ZBOM logo">
       <b>ZBOM Account Sign In</b>
       <p>Sign in with an Admin, Sub-Admin or User account. Access will follow the assigned role.</p>
       <div class="saved-accounts-group hidden" id="savedAccountsGroup" style="margin-bottom: 10px;">
@@ -423,7 +423,7 @@
   </div>
   <div class="admin-login-overlay hidden" id="accessRestrictedOverlay">
     <div class="admin-login-card">
-      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <img class="login-logo" src="/web/assets/zcode.ico" alt="ZBOM logo">
       <b>Access Restricted</b>
       <p>Please log in as <strong>Master User</strong> or <strong>Admin</strong> to access this module.</p>
       <p style="color:#bb0000;font-size:10px;margin-top:8px;">This module is restricted to authorized personnel only.</p>
@@ -435,7 +435,7 @@
   </div>
   <div class="admin-login-overlay hidden" id="registrationOverlay">
     <div class="admin-login-card registration-card">
-      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <img class="login-logo" src="/web/assets/zcode.ico" alt="ZBOM logo">
       <b>Create ZBOM Account</b>
       <p>Create a standard User account. Sub-Admin access requires Main Admin approval.</p>
       <div class="registration-grid">
@@ -475,7 +475,7 @@
        here is removed on purpose: it fabricated a signed-in admin
        ("Zakaria Alam Mithu", role admin, authenticated: true) with no
        login, which must never exist online. See web-erp.js. -->
-  <script src="web-erp.js"></script>
+  <script src="/web/web-erp.js"></script>
   <script>
     window.addEventListener("error", (e) => {
       console.error("GLOBAL RENDERER ERROR:", e.message, "at", e.filename, ":", e.lineno, e.error ? e.error.stack : "");
@@ -484,8 +484,8 @@
       console.error("UNHANDLED PROMISE REJECTION:", e.reason ? (e.reason.stack || e.reason) : e);
     });
   </script>
-  <script src="renderer.js"></script>
+  <script src="/web/renderer.js"></script>
   <!-- ONLINE ONLY: server-side material search (see web-online.js). -->
-  <script src="web-online.js"></script>
+  <script src="/web/web-online.js"></script>
 </body>
 </html>

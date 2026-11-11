@@ -1,1 +1,1 @@
-{"$schema":"https://openapi.vercel.sh/vercel.json","functions":{"api/materials.js":{"includeFiles":"data/materials-index-*.json"}},"rewrites":[{"destination":"/web/index.html","source":"/"}]}
+{"$schema":"https://openapi.vercel.sh/vercel.json","functions":{"api/materials.js":{"includeFiles":"api/materials-data/materials-index-*.json"}},"rewrites":[{"destination":"/web/index.html","source":"/"}]}

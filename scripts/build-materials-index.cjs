@@ -10,21 +10,26 @@
 //   npm run build-index
 //
 // Source:  ../Fabric Material code-.xlsx  (sheet "Mastar file")
-// Output:  ../data/materials-index-1.json ... -4.json
+// Output:  ../api/materials-data/materials-index-1.json ... -4.json
 //          { generatedAt, sourceFile, sourceSheet, sourceRows, columns,
 //            rows, chunk, chunks }
 // The index is read by api/materials.js (via vercel.json `includeFiles`).
-// It is NOT copied into web/ and must not be served as a static file
-// (see .vercelignore) — the API only ever returns <= 100 rows per call.
+// It lives under api/ on purpose: files under api/ are bundled into the
+// function but are NOT served as public static files, so the master
+// never reaches a browser directly — the API only ever returns
+// <= 100 rows per call. Do NOT move the chunks to data/ (that folder
+// is .vercelignore'd, so Vercel would not bundle them at all — live
+// /api/materials then 500s with "ENOENT: scandir '/var/task/data'",
+// which is exactly what happened on 2026-11-11).
 //
 // Why chunks, not one file: the single 17.1 MB index
 // (data/materials-index.json) would not push to GitHub — the SSH proxy
 // tunnel broke with "Broken pipe" on every attempt containing that file,
 // while code-only pushes went through fine. So the index is split into
 // 4 chunks of ~26k rows (~4.3 MB each), committed and pushed one at a
-// time. api/materials.js loads every data/materials-index-*.json chunk
-// it finds, so a partial upload still works (and reports clearly if no
-// chunk is present at all).
+// time. api/materials.js loads every
+// api/materials-data/materials-index-*.json chunk it finds, so a partial
+// upload still works (and reports clearly if no chunk is present at all).
 "use strict";
 
 const fs = require("node:fs");
@@ -34,7 +39,7 @@ const XLSX = require("xlsx");
 const SOURCE = path.join(__dirname, "..", "Fabric Material code-.xlsx");
 const SHEET = "Mastar file";
 const CHUNKS = 4;
-const OUT_DIR = path.join(__dirname, "..", "data");
+const OUT_DIR = path.join(__dirname, "..", "api", "materials-data");
 
 function main() {
   const started = Date.now();

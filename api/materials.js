@@ -10,12 +10,20 @@
 // Performance: parsing the 10.3 MB .xlsx with the xlsx library takes
 // ~12 s and ~800 MB RSS, which exceeds a Vercel Hobby cold start
 // (10 s / 1024 MB). So this function reads the pre-extracted compact
-// index in data/materials-index-*.json instead (4 chunks of ~26k rows,
-// ~4.3 MB each, columns listed once, rows as arrays — see
+// index in api/materials-data/materials-index-*.json instead (4 chunks
+// of ~26k rows, ~4.3 MB each, columns listed once, rows as arrays — see
 // scripts/build-materials-index.cjs). First load parses them in ~0.2 s;
 // the parsed index is cached in module scope, so warm invocations only
 // pay the ~0.1-0.3 s search. Re-run `npm run build-index` after the
 // master workbook changes.
+//
+// Why the chunks live under api/ (not data/): .vercelignore excluded
+// data/, so Vercel never bundled the index into the function at all —
+// live /api/materials 500'd with "ENOENT: scandir '/var/task/data'".
+// Files under api/ are not served as public static assets, so the
+// master stays out of browsers' reach while includeFiles still bundles
+// the chunks into this function. Do NOT move them back to data/ and do
+// NOT remove the api/ exclusion note in .vercelignore.
 //
 // Why chunks: the single 17.1 MB index file would not push to GitHub —
 // the SSH proxy tunnel broke with "Broken pipe" on every attempt
@@ -25,14 +33,13 @@
 // present at all, instead of crashing.
 //
 // Plain Node req/res only — no framework, works on Vercel and locally.
-// The index file reaches Vercel via vercel.json `functions.includeFiles`
-// (it is excluded from static deployment by .vercelignore).
+// The index chunks reach Vercel via vercel.json `functions.includeFiles`.
 "use strict";
 
 const fs = require("node:fs");
 const path = require("node:path");
 
-const INDEX_DIR = path.join(__dirname, "..", "data");
+const INDEX_DIR = path.join(__dirname, "materials-data");
 const CHUNK_FILE = /^materials-index-(\d+)\.json$/;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -51,7 +58,7 @@ function loadIndex() {
     throw new Error(`materials index is not fully uploaded yet (could not read index directory: ${error.message})`);
   }
   if (files.length === 0) {
-    throw new Error("materials index is not fully uploaded yet (no data/materials-index-*.json chunk found)");
+    throw new Error("materials index is not fully uploaded yet (no api/materials-data/materials-index-*.json chunk found)");
   }
 
   // Load every chunk present, in chunk-number order, and concatenate rows.

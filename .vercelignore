@@ -3,12 +3,12 @@
 # and desktop-client/ holds the Electron app — including its renderer
 # fallback stub, which fabricates a signed-in admin with no login.
 # None of that may be reachable from the deployed site.
-# data/materials-index-*.json are excluded here too, but are still bundled
-# INTO the api/materials.js function via vercel.json `includeFiles`, so
-# the API can read them while browsers cannot download them directly.
-# VERIFY on the first Vercel deploy: GET /api/materials?q= must return
-# rows. If it 500s with "materials index could not be loaded", the
-# includeFiles + .vercelignore interaction needs revisiting.
+# NOTE: the materials index chunks live under api/materials-data/ on
+# purpose (see api/materials.js). Files under api/ are bundled into the
+# function and are NOT served as public static files, so no .vercelignore
+# line is needed for them. Do NOT move the chunks to data/ — data/ is
+# ignored here, and Vercel then never bundles them: live /api/materials
+# 500s with "ENOENT: scandir '/var/task/data'" (seen 2026-11-11).
 desktop-client
 Fabric Material code-.xlsx
 All Grey Material Code.xlsx
@@ -16,4 +16,3 @@ Circular Knitting.xls
 Code UPload file
 LSMW BOM Upload file
 Routing
-data
