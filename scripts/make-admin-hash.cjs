@@ -28,7 +28,10 @@ function readPasswordLine(prompt) {
   return new Promise((resolve) => {
     process.stdout.write(prompt);
     const stdin = process.stdin;
-    let input = "";
+    // Collect raw bytes and decode as UTF-8 at the end, so a password
+    // with non-ASCII characters hashes exactly as typed (the old
+    // per-byte fromCharCode mangled multi-byte characters).
+    const bytes = [];
     const onData = (chunk) => {
       for (const byte of chunk) {
         if (byte === 0x0d || byte === 0x0a) {
@@ -36,7 +39,7 @@ function readPasswordLine(prompt) {
           if (stdin.isTTY) stdin.setRawMode(false);
           stdin.pause();
           process.stdout.write("\n");
-          resolve(input);
+          resolve(Buffer.from(bytes).toString("utf8"));
           return;
         }
         if (byte === 0x03) {
@@ -45,13 +48,13 @@ function readPasswordLine(prompt) {
           process.exit(1);
         }
         if (byte === 0x7f) {
-          if (input.length > 0) {
-            input = input.slice(0, -1);
+          if (bytes.length > 0) {
+            bytes.pop();
             // Erase one "*" from the screen (TTY only).
             if (stdin.isTTY) process.stdout.write("\b \b");
           }
         } else if (byte >= 0x20) {
-          input += String.fromCharCode(byte);
+          bytes.push(byte);
           // Show one "*" per typed character so the user can see that
           // typing works. The password itself is never shown.
           if (stdin.isTTY) process.stdout.write("*");

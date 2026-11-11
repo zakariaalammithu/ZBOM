@@ -59,12 +59,21 @@ module.exports = async (req, res) => {
   const config = auth.loadAdminConfig();
   const username = String(body.username || "").trim().toLowerCase();
   const password = String(body.password || "");
-  if (
-    !config.credential ||
-    !config.secret ||
-    username !== config.username ||
-    !auth.verifyPassword(password, config.credential)
-  ) {
+  // Diagnostic only: log WHICH check failed to Vercel Runtime Logs so a
+  // persistent 401 can be diagnosed. The 401 response stays identical,
+  // and nothing secret is ever logged (no password, no hash, no token).
+  let failReason = null;
+  if (!config.credential) {
+    failReason = "no credential (ZBOM_ADMIN_PASSWORD_HASH missing or not JSON)";
+  } else if (!config.secret) {
+    failReason = "no secret (ZBOM_SESSION_SECRET missing)";
+  } else if (username !== config.username) {
+    failReason = "username mismatch";
+  } else if (!auth.verifyPassword(password, config.credential)) {
+    failReason = "password mismatch";
+  }
+  if (failReason) {
+    console.log("ZBOM login fail: " + failReason);
     sendJson(res, 401, FAIL);
     return;
   }
