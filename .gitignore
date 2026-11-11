@@ -1,0 +1,20 @@
+# Dependencies / build output
+node_modules/
+release/
+dist/
+out/
+
+# Archives and logs
+*.zip
+*.log
+.env
+
+# Test / scratch data
+scratch/
+
+# Excel temporary lock files
+~$*
+
+# OS files
+.DS_Store
+Thumbs.db

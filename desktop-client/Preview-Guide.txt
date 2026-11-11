@@ -1,0 +1,11 @@
+ZBOM Preview Mode
+==================
+
+1. Double-click Start-ZBOM-Preview.cmd.
+2. The title bar will show PREVIEW MODE - AUTO REFRESH.
+3. Keep the preview application open while changes are being made.
+4. Changes to the interface files refresh automatically without installation.
+5. Shared-folder settings and offline cached data remain available.
+6. Close the preview window normally when testing is finished.
+
+Use the installer only after all requested changes have been approved.

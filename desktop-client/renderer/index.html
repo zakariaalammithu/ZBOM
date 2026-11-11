@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZBOM</title>
+  <link rel="icon" type="image/x-icon" href="assets/zcode.ico">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .routing-download-card{grid-template-columns:110px minmax(260px,1fr) minmax(205px,auto);overflow:visible}
+    .routing-download-card>div:nth-child(2){min-width:0;overflow:visible}
+    .routing-download-card h3,.routing-download-card p,.routing-download-card small{white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+    @media(max-width:1100px){.routing-download-card{grid-template-columns:90px minmax(0,1fr)}.routing-download-card .routing-download-button{grid-column:1/-1;width:100%}}
+    @media(max-width:900px){.routing-download-card{grid-template-columns:1fr}.routing-download-card .excel-file-icon{margin:auto;transform:none}.routing-download-card .routing-download-button{grid-column:1}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><img src="assets/zcode.ico" alt="ZBOM logo" id="brandLogo"><span><strong>ZBOM</strong><small>ZBOM</small></span></div>
+      <nav>
+        <button data-view="dashboard" class="active"><i>⌂</i> Overview</button>
+        <small class="nav-group">DATA MODULES</small>
+        <button type="button" data-view="materials" id="materialModuleToggle" class="expanded" aria-expanded="true" aria-controls="materialSubmodules"><i>▦</i> <span>Fabric Material Code</span><em class="nav-expand-arrow">›</em></button>
+        <div class="submodule-group" id="materialSubmodules">
+          <button class="submodule-nav" data-view="codeRequirement"><i>└</i> Code Requirement File</button>
+          <button class="submodule-nav" data-view="finishType"><i>└</i> Finish Type Short Name</button>
+          <button class="submodule-nav" id="zkngMaterialUploadNav" data-view="zkngMaterialUpload"><i>└</i> ZKNG Material Upload File</button>
+          <button class="submodule-nav" id="lsmwBomUploadNav" data-view="lsmwBomUpload"><i>└</i> LSMW BOM Upload File</button>
+          <button class="submodule-nav" data-view="routingUploadFormat"><i>└</i> Routing Upload File</button>
+          <button class="submodule-nav" id="characteristicsUploadNav" data-view="characteristicsUpload"><i>└</i> Characteristics Upload File</button>
+        </div>
+        <button data-view="summary" id="primarySummaryNav" class="expanded"><i>▥</i> <span>Circular Knitting</span><em class="nav-expand-arrow">›</em></button>
+        <div class="submodule-group" id="summarySubmodules">
+          <button class="submodule-nav" data-view="diaWiseSummary"><i>└</i> Dia Wise Summary</button>
+        </div>
+        <div class="department-nav" id="departmentNav"></div>
+        <small class="nav-group">MANAGEMENT</small>
+        <button data-view="administration" id="administrationNav" class="hidden"><i>♙</i> <span>Administration</span><em class="nav-expand-arrow">›</em></button>
+        <div class="submodule-group hidden" id="administrationSubmodules">
+          <button class="submodule-nav" data-view="administration" data-admin-section="adminUserControlPanel"><i>└</i> User Control Center</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="departmentManagementPanel"><i>└</i> Departments</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="adminPasswordPanel"><i>└</i> Password Control</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="departmentUploadPanel"><i>└</i> File Upload</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="accountManagementPanel"><i>└</i> Account Management</button>
+        </div>
+        <button data-view="settings"><i>⚙</i> Settings</button>
+      </nav>
+      <div class="side-status hidden" id="sideStatus"><i></i><span><b>Checking LAN…</b><small id="sideUpdated">No local update</small></span></div>
+      <div class="profile"><button class="profile-photo" id="changeProfilePhoto" title="Change your profile photo"><span id="profileInitials">GU</span><img class="hidden" id="profileImage" alt="Profile"></button><div><b id="profileName">Guest User</b><small id="profileRole">Guest User</small><div class="profile-links"><button class="change-photo-button" id="changeProfilePhotoButton">Change Photo</button><button class="logout-button" id="logoutUser">Sign In / Create Account</button></div></div></div>
+    </aside>
+
+    <main>
+      <header>
+        <div><small>ZBOM</small><div class="page-title-row"><h1 id="pageTitle">Overview</h1><span class="header-last-updated hidden" id="headerLastUpdated">Last updated: <strong>Not updated yet</strong></span></div></div>
+        <div class="actions"><span class="preview-badge hidden" id="previewBadge">PREVIEW MODE · AUTO REFRESH</span><span class="connection" id="connection">● Checking</span><button class="secondary" id="openShare">Open Shared Folder</button><button class="secondary" id="reloadApp" title="Reload ZBOM Desktop Software (F5 / Ctrl+R)">↻ Reload App</button><button class="primary" id="updateNow">Update Now</button></div>
+      </header>
+      <div class="notice hidden" id="notice"></div>
+      <div class="download-complete hidden" id="downloadComplete">
+        <div><b>Download complete</b><small id="downloadedFileName"></small></div>
+        <button class="primary" id="openDownloadedFile">Open File</button>
+        <button class="secondary" id="closeDownloadNotice">Close</button>
+      </div>
+      <div class="software-update hidden" id="softwareUpdate">
+        <div><b id="softwareUpdateTitle">New ZBOM version available</b><small id="softwareUpdateText"></small></div>
+        <button class="primary" id="installSoftwareUpdate">Update Now &amp; Restart</button>
+      </div>
+
+      <section class="view active" id="dashboard">
+        <div class="overview-hero">
+          <div><span>ZBOM ERP WORKSPACE</span><h2>Welcome, <b id="overviewUserName">User</b></h2><p><strong id="overviewUserRole">User</strong> · Data remains available offline.</p></div>
+          <div class="quick"><button data-go="materials">⌕ <span>Fabric Material Code<small>Search codes and specifications</small></span></button><button data-go="summary">▥ <span id="dashboardSummaryName">Circular Knitting<small>Orders, running and balance</small></span></button></div>
+        </div>
+        <div class="metrics overview-metrics">
+          <article><small>Material Records</small><strong id="materialCount">0</strong><em>available offline</em></article>
+          <article><small>Finish Type Entries</small><strong id="finishTypeCount">0</strong><em>searchable records</em></article>
+          <article><small>Department Files</small><strong id="departmentFilesCount">0 / 0</strong><em>files currently available</em></article>
+          <article><small>Last Data Sync</small><strong class="date" id="lastUpdate">Never</strong><em id="dataStatus">Update required</em></article>
+        </div>
+        <div class="panel overview-status-panel">
+          <div class="panel-title"><div><h3>Department Update Status</h3><p>Each module shows its own latest file and update time.</p></div><span class="overview-status-summary" id="overviewStatusSummary">Available offline</span></div>
+          <div class="overview-status-list" id="overviewDepartmentStatus"></div>
+        </div>
+        <div class="hidden" aria-hidden="true"><span id="summaryCount"></span><span id="summaryMetricName"></span><span id="materialSource"></span><span id="finishTypeSource"></span><span id="summarySource"></span><span id="summarySourceName"></span></div>
+      </section>
+
+      <section class="view" id="materials">
+        <div class="module-update-bar"><span><i></i><b>Fabric Material Code</b></span><span>Last updated: <strong id="materialFileUpdated">Not updated yet</strong></span><small id="materialFileName">No source file</small></div>
+        <div class="material-filters hidden" id="materialColumnFilters">
+          <div class="filter-heading"><div><h3>Search Fabric Material Code</h3><p>Search and select one or more values. Every filter depends on the current selections.</p></div><button class="secondary" id="clearMaterialFilters">Clear All</button></div>
+          <div class="filter-grid">
+            <label>Grey Material<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="Grey Material">Search and select...</button></label>
+            <label>DESCRIPTION<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="DESCRIPTION">Search and select...</button></label>
+            <label>MATERIAL TYPE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="MATERIAL TYPE">Search and select...</button></label>
+            <label>GROUP<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="GROUP">Search and select...</button></label>
+            <label>FABRIC TYPE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FABRIC TYPE">Search and select...</button></label>
+            <label>FABRICATION<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FABRICATION">Search and select...</button></label>
+            <label>DESIGN/JACQUARD DESIGN<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="DESIGN/JACQUARD DESIGN">Search and select...</button></label>
+            <label>FABRIC COMPOSITION<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FABRIC COMPOSITION">Search and select...</button></label>
+            <label>GSM<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="GSM">Search and select...</button></label>
+            <label>FINISH TYPE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FINISH TYPE">Search and select...</button></label>
+            <label>YARN COUNT &amp; PROCESS-1<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="YARN COUNT &amp; PROCESS-1">Search and select...</button></label>
+            <label>FIBRE TYPE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FIBRE TYPE">Search and select...</button></label>
+            <label>SPECIAL TREATMENT<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="SPECIAL TREATMENT">Search and select...</button></label>
+            <label>COLOR CODE / COLOR<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="COLOR CODE / COLOR">Search and select...</button></label>
+            <label>COLOR COMBO<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="COLOR COMBO">Search and select...</button></label>
+            <label>REPET SIZE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="REPET SIZE">Search and select...</button></label>
+            <label>FINISH MATERIAL CODE<button type="button" class="summary-field-filter-button material-value-filter-button" data-value-filter="materials" data-table-type="materials" data-column="FINISH MATERIAL CODE">Search and select...</button></label>
+          </div>
+          <div class="summary-active-filters hidden" id="materialActiveFilters"><b>Active Filters</b><div id="materialActiveFilterChips"></div></div>
+        </div>
+        <div class="toolbar"><div class="search">⌕ <input id="materialSearch" placeholder="Search across columns, e.g. 150 black 30/1com"></div><button class="secondary filter-toggle" id="toggleMaterialFilters">☷ Filter</button><button class="secondary clear-filters" id="clearAllMaterialFilters">Clear Filters</button><button class="secondary export" data-format="csv">CSV</button><button class="primary export" data-format="xlsx">Excel ↓</button><button class="secondary admin-upload-btn hidden" data-admin-upload="materials">⚙ Admin Upload</button></div>
+        <div class="table-card"><div class="table-meta"><b id="materialMatches">0 records</b><span id="materialPageMeta">Drag a header border to resize · 100 results per page</span></div><div class="table-scroll"><table id="materialTable"></table></div><div class="table-pagination" id="materialPagination"></div></div>
+      </section>
+
+      <section class="view" id="finishType">
+        <div class="module-update-bar"><span><i></i><b>Finish Type Short Name</b></span><span>Last updated: <strong id="finishTypeFileUpdated">Not updated yet</strong></span><small id="finishTypeFileName">No source file</small></div>
+        <div class="toolbar"><div class="search">⌕ <input id="finishTypeSearch" placeholder="Search short name, full name or remarks…"></div><button class="secondary clear-filters" id="clearFinishTypeFilters">Clear Filters</button><button class="secondary export" data-format="csv">CSV</button><button class="primary export" data-format="xlsx">Excel ↓</button><button class="secondary admin-upload-btn hidden" data-admin-upload="finishType">⚙ Admin Upload</button></div>
+        <div class="table-card"><div class="table-meta"><b id="finishTypeMatches">0 records</b><span id="finishTypePageMeta">100 results per page</span></div><div class="table-scroll"><table id="finishTypeTable"></table></div><div class="table-pagination" id="finishTypePagination"></div></div>
+      </section>
+
+      <section class="view" id="codeRequirement">
+        <div class="resource-page">
+          <div class="resource-card">
+            <div class="excel-file-icon" aria-hidden="true"><b>X</b><span></span></div>
+            <div class="resource-copy">
+              <span>EXCEL TEMPLATE</span>
+              <h2>Code Requirement File</h2>
+              <p>Download this Excel file to prepare and submit a new code requirement.</p>
+              <small>Microsoft Excel workbook · Ready for merchandiser input</small>
+            </div>
+            <button class="resource-download-primary" id="downloadCodeRequirement"><i>↓</i><span><b>Download for New Code Requirement</b><small>Code Requirement file.xlsx</small></span></button>
+            <button class="secondary admin-upload-btn hidden" data-admin-upload="codeRequirement" style="grid-column: 1/-1; margin-top: 8px;">⚙ Admin Upload / Replace Template</button>
+          </div>
+          <div class="resource-preview-card">
+            <div class="resource-preview-heading"><div><b>Excel Template Preview</b><small id="codeRequirementPreviewInfo">Loading all columns and rows…</small></div><span>Read-only preview · Scroll horizontally to see every column</span></div>
+            <div class="resource-preview-scroll"><table id="codeRequirementPreviewTable"></table></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="routingUploadFormat">
+        <div class="routing-workspace routing-file-workspace">
+          <div class="routing-hero routing-file-hero">
+            <div><span>SAP · ROUTING PREPARATION</span><h2>Routing Upload File</h2><p>Upload any Material Code workbook. ZBOM creates the lookup key automatically, applies the secured Routing Master rules and prepares a SAP-ready file.</p></div>
+            <div class="routing-master-indicator"><small>Routing service</small><strong id="routingMasterStatus">Checking...</strong><em id="routingMasterDate">Secured routing template</em></div>
+          </div>
+          <div class="routing-admin-master hidden" id="routingAdminMaster">
+            <div><b>Admin: Routing Master Format</b><small id="routingMasterAdminInfo">Only Admin can view or replace the secured Routing Master.</small></div>
+            <button class="secondary" id="uploadRoutingMaster">Replace Routing Master</button>
+          </div>
+          <div class="routing-step-card routing-file-input-card">
+            <div class="routing-step-number">1</div>
+            <div class="routing-step-copy"><span>STEP 1 · MATERIAL INPUT</span><h3>Select the Material Code workbook</h3><p>Excel and CSV files with any filename are accepted. One unique Material Number produces one Routing row.</p><small id="routingMaterialInfo">No Material Code file selected.</small></div>
+            <div class="routing-input-actions"><button class="secondary" id="clearRoutingMaterial">Reset Input</button><button class="primary routing-import-button" id="importRoutingMaterial">Select &amp; Process File</button></div>
+          </div>
+          <div class="routing-results hidden" id="routingResults">
+            <article><small>Source Materials</small><strong id="routingImportedRows">0</strong></article>
+            <article class="matched"><small>Ready Rows</small><strong id="routingMatchedRows">0</strong></article>
+            <article class="unmatched"><small>Skipped Rows</small><strong id="routingUnmatchedRows">0</strong></article>
+          </div>
+          <div class="routing-unmatched hidden" id="routingUnmatched"><b id="routingReviewMessage">Some routing rows need Admin review before download.</b><div id="routingUnmatchedList"></div></div>
+          <div class="routing-download-card routing-file-output-card">
+            <div class="excel-file-icon" aria-hidden="true"><b>X</b><span></span></div>
+            <div><span>STEP 2 · READY OUTPUT</span><h3>Routing Upload File – Ready</h3><p>Download the processed Excel workbook prepared in the standard SAP Routing column structure.</p><small id="routingReadyInfo">Process a Material Code file to enable the download.</small></div>
+            <button class="routing-download-button" id="downloadRoutingReady" disabled><i>↓</i><span><b>Download Ready File</b><small>Routing Upload File (.xlsx)</small></span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="characteristicsUpload">
+        <div class="routing-workspace">
+          <div class="routing-hero">
+            <div><span>SAP · CHARACTERISTICS PREPARATION</span><h2>Characteristics Upload File</h2><p>Upload a Material Code workbook to generate the SAP Characteristics Upload File formatted for material classification.</p></div>
+            <div class="routing-master-indicator"><small>Characteristics service</small><strong id="characteristicsStatus">Ready</strong><em>Master User &amp; Admin only</em></div>
+          </div>
+          <div class="routing-admin-master hidden" id="characteristicsAdminMaster">
+            <div class="master-file-control-actions">
+              <button type="button" class="secondary master-file-action" data-master-action="clear" data-master-section="characteristicsUpload" id="clearCharacteristicsMaster">Clear</button>
+              <button type="button" class="primary master-file-action" data-master-action="upload" data-master-section="characteristicsUpload" id="uploadCharacteristicsMaster">Upload</button>
+            </div>
+          </div>
+          <div class="routing-step-card"><div class="routing-step-number">1</div><div class="routing-step-copy"><span>STEP 1 · SOURCE FILE</span><h3>Select Material Code File</h3><p>Select the Excel or CSV file containing Material Number, Description, Fabric Type, Fabrication, Composition, GSM, Finish Type, and Yarn details.</p><small id="characteristicsMaterialInfo">No Material Code file selected.</small></div><div class="routing-input-actions"><button class="secondary" id="clearCharacteristicsMaterial">Reset Input</button><button class="primary routing-import-button" id="importCharacteristicsMaterial">Select &amp; Process File</button></div></div>
+          <div class="routing-results hidden" id="characteristicsResults"><article><small>Source Rows</small><strong id="characteristicsImportedRows">0</strong></article><article class="matched"><small>Ready Rows</small><strong id="characteristicsMatchedRows">0</strong></article></div>
+          <div class="routing-download-card material-ready-card"><div class="excel-file-icon" aria-hidden="true"><b>C</b><span></span></div><div><span>STEP 2 · READY FILE</span><h3>Characteristics Upload File – Ready</h3><p>Download the processed Excel workbook in the standard SAP Characteristics column structure.</p><small id="characteristicsReadyInfo">Process a Material Code file to enable the download.</small></div><div class="dual-download-actions"><button class="routing-download-button" id="downloadCharacteristicsReady" disabled><i>↓</i><span><b>Download Ready File</b><small>Characteristics Upload (.xlsx)</small></span></button></div></div>
+        </div>
+      </section>
+
+      <section class="view" id="zkngMaterialUpload">
+        <div class="routing-workspace">
+          <div class="routing-hero"><div><span>SAP MATERIAL FILE PREPARATION</span><h2>ZKNG Material Upload File</h2><p>Select a Material Code workbook to generate the fixed-value ZKNG Material Upload File required for SAP.</p></div><div class="routing-master-indicator"><small>ZKNG template</small><strong id="zkngServiceStatus">Checking...</strong><em id="zkngServiceDate">Checking master template</em></div></div>
+          <div class="routing-admin-master hidden" id="zkngAdminMaster">
+            <div class="master-file-control-actions">
+              <button type="button" class="secondary master-file-action" data-master-action="clear" data-master-section="zkngMaterialUpload" id="clearZkngMaster">Clear</button>
+              <button type="button" class="primary master-file-action" data-master-action="upload" data-master-section="zkngMaterialUpload" id="uploadZkngMaster">Upload</button>
+            </div>
+          </div>
+          <div class="routing-step-card"><div class="routing-step-number">1</div><div class="routing-step-copy"><span>STEP 1 · SOURCE FILE</span><h3>Select Material Code File</h3><p>Select the Excel file containing Material Number, Description and Group. The app maps all rows into the secured ZKNG template.</p><small id="zkngMaterialInfo">No Material Code file selected.</small></div><div class="routing-input-actions"><button class="secondary" id="clearZkngMaterial">Reset Input</button><button class="primary routing-import-button" id="importZkngMaterial">Select &amp; Process File</button></div></div>
+          <div class="routing-results hidden" id="zkngResults"><article><small>Source Rows</small><strong id="zkngImportedRows">0</strong></article><article class="matched"><small>Ready Rows</small><strong id="zkngMatchedRows">0</strong></article><article class="unmatched"><small>Skipped Rows</small><strong id="zkngUnmatchedRows">0</strong></article></div>
+          <div class="routing-download-card material-ready-card"><div class="excel-file-icon" aria-hidden="true"><b>M</b><span></span></div><div><span>STEP 2 · READY FILE</span><h3>ZKNG Material Upload File – Ready</h3><p>Download the completed fixed-value Excel workbook for direct SAP material upload.</p><small id="zkngReadyInfo">Process a Material Code file to enable the download.</small></div><div class="dual-download-actions"><button class="routing-download-button" id="downloadZkngReady" disabled><i>↓</i><span><b>Download Ready File</b><small>ZKNG Material Upload</small></span></button><button class="routing-download-button both-files hidden" id="downloadBothReady" disabled><i>⇩</i><span><b>Download Both Files</b><small>Material + Routing</small></span></button></div></div>
+        </div>
+      </section>
+
+      <section class="view" id="lsmwBomUpload">
+        <div class="routing-workspace lsmw-workspace">
+          <div class="routing-hero lsmw-hero">
+            <div>
+              <span>SAP · LSMW BOM PREPARATION</span>
+              <h2>LSMW BOM Upload File</h2>
+              <p>Convert one Material Code workbook into four validated Header and Item files, ready for SAP LSMW upload.</p>
+            </div>
+            <div class="routing-master-indicator">
+              <small>BOM processing service</small>
+              <strong id="lsmwBomServiceStatus">Ready</strong>
+              <em id="lsmwBomServiceDate">Secured BOM rules</em>
+            </div>
+          </div>
+          <div class="routing-step-card lsmw-input-card"><div class="routing-step-number">1</div><div class="routing-step-copy"><span>STEP 1 · MATERIAL INPUT</span><h3>Select the Material Code workbook</h3><p>Item_BOM copies every source row in the same order: Column L → BOM component and Column S → Quantity. No rows are summed or removed; every Quantity is formatted to 3 decimal places.</p><small id="lsmwBomMaterialInfo">No Material Code file selected.</small></div><div class="routing-input-actions"><button class="secondary" id="clearLsmwBomMaterial">Reset Input</button><button class="primary routing-import-button" id="importLsmwBomMaterial">Select &amp; Process File</button></div></div>
+          <div class="routing-results hidden lsmw-results" id="lsmwBomResults"><article><small>Source Rows</small><strong id="lsmwBomImportedRows">0</strong></article><article class="matched"><small>Unique Header Rows</small><strong id="lsmwBomHeaderRows">0</strong></article><article class="matched"><small>Item Rows</small><strong id="lsmwBomItemRows">0</strong></article></div>
+          <div class="routing-download-card material-ready-card lsmw-output-card"><div class="excel-file-icon" aria-hidden="true"><b>B</b><span></span></div><div><span>STEP 2 · SAP READY OUTPUT</span><h3>Four LSMW BOM Ready Files</h3><p>Download all files inside one date-named folder, or download a specific Header/Item file separately.</p><small id="lsmwBomReadyInfo">Process a Material Code file to enable downloads.</small></div>
+            <div class="dual-download-actions lsmw-download-actions">
+              <button class="routing-download-button both-files lsmw-download-all" id="downloadAllLsmwBom" disabled><i>⇩</i><span><b>Download All 4 Files</b><small>Date-named BOM Ready folder</small></span></button>
+              <div class="lsmw-file-buttons">
+                <button class="routing-download-button xlsx-file" id="downloadHeaderBomXlsx" disabled><i>↓</i><span><b>Header Excel</b><small>.xlsx</small></span></button>
+                <button class="routing-download-button txt-file" id="downloadHeaderBomTxt" disabled><i>↓</i><span><b>Header TXT</b><small>.txt</small></span></button>
+                <button class="routing-download-button xlsx-file" id="downloadItemBomXlsx" disabled><i>↓</i><span><b>Item Excel</b><small>.xlsx</small></span></button>
+                <button class="routing-download-button txt-file" id="downloadItemBomTxt" disabled><i>↓</i><span><b>Item TXT</b><small>.txt</small></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="summary">
+        <div class="module-update-bar"><span><i></i><b id="summaryUpdateTitle">Circular Knitting</b></span><span>Last updated: <strong id="summaryFileUpdated">Not updated yet</strong></span><small id="summaryFileName">No source file</small></div>
+        <div class="summary-search-panel">
+          <div class="summary-search-heading"><div><h3>Search Circular Knitting</h3><p>Open one or more filters, search values and select the required results.</p></div><div style="display:flex; gap:8px;"><button class="secondary clear-filters" id="clearAllSummaryFilters">Clear Filters</button><button class="secondary admin-upload-btn hidden" data-admin-upload="summary">⚙ Admin Upload</button></div></div>
+          <div class="summary-search-grid">
+            <label>Buyer<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="Buyer">Search and select...</button></label>
+            <label>Order NO<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="Order NO">Search and select...</button></label>
+            <label>SO-Item<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="SO-Item">Search and select...</button></label>
+            <label>Style<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="Style">Search and select...</button></label>
+            <label>Material Number<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="Material Number">Search and select...</button></label>
+            <label>Material Description<button type="button" class="summary-field-filter-button" data-table-type="summary" data-column="Material Description">Search and select...</button></label>
+            <label>Machine / Dia / Fabric Type
+              <div class="summary-multi-filter">
+                <button type="button" id="summaryCategoryButton">All results ▾</button>
+                <div class="summary-multi-menu hidden" id="summaryCategoryMenu">
+                  <div class="summary-category-search"><input id="summaryCategorySearch" placeholder="Search"></div>
+                  <div class="summary-multi-actions"><button type="button" id="summaryCategoryToggleAll">Clear All</button></div>
+                  <div class="summary-category-options" id="summaryCategoryOptions"></div>
+                  <button type="button" class="primary" id="summaryCategoryApply">Apply Filter</button>
+                </div>
+              </div>
+            </label>
+          </div>
+          <div class="summary-active-filters hidden" id="summaryActiveFilters"><b>Active Filters</b><div id="summaryActiveFilterChips"></div></div>
+          <div class="summary-export-actions"><button class="secondary export" data-format="csv">CSV</button><button class="primary export" data-format="xlsx">Excel ↓</button></div>
+        </div>
+        <div class="summary-cards summary-quantity-cards"><div class="balance-card"><small>Knitting Balance Quantity</small><b id="balanceTotal">0</b></div><div class="knitted-card"><small>Knitting Knitted Quantity</small><b id="runningTotal">0</b></div></div>
+        <div class="table-card"><div class="table-meta"><b id="summaryMatches">0 records</b><span id="summaryPageMeta">Drag a header border to resize · 100 results per page</span></div><div class="table-scroll"><table id="summaryTable"></table></div><div class="table-pagination" id="summaryPagination"></div></div>
+      </section>
+
+      <section class="view" id="diaWiseSummary">
+        <div class="dia-summary-heading">
+          <div><span>MANAGEMENT SUMMARY</span><h2>Dia Wise Summary</h2><p>Order, knitting and machine-dia balances from the Circular Knitting workbook.</p></div>
+          <div class="dia-heading-balance"><small>Knitting Balance Qty</small><strong id="diaKnittingBalance">0 Ton</strong></div>
+          <button class="primary export dia-download" data-format="xlsx">Download Print-ready Excel</button>
+          <div class="dia-summary-search">⌕ <input id="diaSummarySearch" placeholder="Search buyer, SFL No., dia or remarks..."></div>
+        </div>
+        <div class="dia-balance-panel">
+          <div class="dia-panel-title"><div><h3>Machine / Dia Balance Overview</h3><p>Net balance by dia and fabric construction. Negative values are highlighted.</p></div><span id="diaBalanceUpdated">Current filtered view</span></div>
+          <div class="dia-balance-grid" id="diaBalanceGrid"></div>
+        </div>
+        <div class="table-card dia-summary-table-card">
+          <div class="table-meta"><b id="diaSummaryMatches">0 records</b><span>Excel-style sheet · scroll horizontally to see every balance column</span></div>
+          <div class="table-scroll"><table id="diaSummaryTable"></table></div>
+        </div>
+      </section>
+
+      <section class="view" id="department">
+        <div class="department-workspace">
+          <div class="module-update-bar"><span><i></i><b id="departmentUpdateTitle">Department</b></span><span>Last updated: <strong id="departmentFileUpdated">Not updated yet</strong></span><small id="departmentFileName">No file uploaded</small></div>
+          <div class="department-hero"><span>DEPARTMENT WORKSPACE</span><h2 id="departmentWorkspaceTitle">Department</h2><p>This workspace is ready for department-specific Excel data, search, filters and reports.</p></div>
+          <div class="department-module-grid">
+            <article><i>▦</i><div><b>Data Register</b><small>Department Excel records and information</small></div><em>READY FOR SETUP</em></article>
+            <article><i>⌕</i><div><b>Search &amp; Filter</b><small>Find information across every column</small></div><em>READY FOR SETUP</em></article>
+            <article><i>⇩</i><div><b>Filtered Download</b><small>Download selected matching records</small></div><em>READY FOR SETUP</em></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="administration">
+        <div class="admin-grid">
+          <div class="admin-overview main-admin-only">
+            <article><small>Total Accounts</small><strong id="adminTotalUsers">1</strong><span>All role-based user accounts</span></article>
+            <article><small>Active Accounts</small><strong id="adminActiveUsers">1</strong><span>Allowed to sign in</span></article>
+            <article><small>Departments</small><strong id="adminDepartmentCount">0</strong><span>Managed workspaces</span></article>
+            <article><small>Uploaded Files</small><strong id="adminUploadedFiles">0</strong><span>Department files available</span></article>
+          </div>
+          <div class="panel main-admin-only" id="adminUsageAnalyticsPanel">
+            <div class="panel-title"><div><h3>User Usage Ranking &amp; File Activity</h3><p>Ranked by recorded use time with module/file activity, percentage and last use.</p></div><span class="role-chip" id="usageUserCount">0 USERS</span></div>
+            <div class="admin-user-table-wrap"><table class="usage-analytics-table"><thead><tr><th>Rank</th><th>User</th><th>Role</th><th>Total Time</th><th>Use %</th><th>Uses</th><th>Most Used Module / File</th><th>Last Used</th></tr></thead><tbody id="usageAnalyticsTable"></tbody></table></div>
+          </div>
+          <div class="panel main-admin-only" id="adminUserControlPanel">
+            <div class="panel-title"><div><h3>User Control Center</h3><p>Assign roles using the access policy below.</p></div><span class="role-chip">FULL CONTROL</span></div>
+            <div class="role-policy-grid">
+              <article><b>Guest User</b><span>View Only</span></article><article><b>Standard User</b><span>View + Data Export</span></article><article><b>Power User</b><span>Upload + Import/Export + Full Data Management (Own Department)</span></article><article><b>Master User</b><span>Upload + Import/Export + Full Data Management (All Departments)</span></article><article><b>Department Head</b><span>Own Department management + Approve, Review and Department Control</span></article><article><b>Admin</b><span>Full System Control + User &amp; Permission Management</span></article>
+            </div>
+            <div class="admin-user-table-wrap">
+              <table class="admin-user-table">
+                <thead><tr><th>User</th><th>Employee ID / Username</th><th>Designation</th><th>Role</th><th>Department</th><th>Password</th><th>Status</th><th>Last Active</th><th>Total Time</th><th>Logins</th><th>Control</th></tr></thead>
+                <tbody id="adminUserTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel main-admin-only" id="departmentManagementPanel">
+            <div class="panel-title"><div><h3>Department Management</h3><p>Add a new department or rename an existing department. The sidebar updates automatically.</p></div></div>
+            <div class="department-management-form">
+              <label>Existing department<select id="existingDepartment"></select></label>
+              <label>Department name<input id="departmentName" placeholder="Enter department name"></label>
+              <button class="secondary" id="addDepartment">Add New</button>
+              <button class="primary" id="renameDepartment">Rename Selected</button>
+            </div>
+          </div>
+          <div class="panel main-admin-only" id="adminPasswordPanel">
+            <div class="panel-title"><div><h3>Password Management</h3><p>Main Admin can set or reset passwords for every Admin, Sub-Admin and User account.</p></div></div>
+            <div class="password-management-form">
+              <label>Admin account<select id="passwordAdminAccount"></select></label>
+              <label>New password<div class="password-input"><input type="password" id="newAdminPassword" placeholder="Minimum 6 characters"><button type="button" class="toggle-password" data-password-target="newAdminPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+              <label>Confirm password<div class="password-input"><input type="password" id="confirmAdminPassword" placeholder="Type password again"><button type="button" class="toggle-password" data-password-target="confirmAdminPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+              <button class="primary" id="setAdminPassword">Set / Change Password</button>
+            </div>
+          </div>
+          <div class="panel" id="departmentUploadPanel">
+            <div class="panel-title"><div><h3>System &amp; Department File Upload</h3><p>Upload every material-related and department file separately under its permanent file name.</p></div><span class="role-chip" id="adminRoleChip">ADMIN</span></div>
+            <div class="admin-form">
+              <div class="upload-last-saved" id="uploadLastSaved">Last saved upload: No file saved yet</div>
+              <label>File Group<select id="uploadScope"><option value="material">Material Related Files</option><option value="department">Department Files</option></select></label>
+              <label id="uploadDepartmentField" class="hidden">Department<select id="uploadDepartment"></select></label>
+              <label>File Name<select id="uploadFileSlot"><option value="LSMW BOM Upload File">LSMW BOM Upload File</option><option value="ZKNG Material Upload File">ZKNG Material Upload File</option><option value="Routing Upload File">Routing Upload File</option><option value="Fabric Material Code">Fabric Material Code</option><option value="Finish Type Short Name">Finish Type Short Name</option><option value="Code Requirement File">Code Requirement File</option></select></label>
+              <label id="uploadNewFileSlotField" class="hidden">New File Name<input id="uploadNewFileSlot" placeholder="Enter the permanent file name"></label>
+              <div class="upload-box"><div><b>Upload this file separately</b><small>One file per upload. Any new file name is saved automatically and will appear in this list for future uploads.</small></div><button class="primary" id="uploadDepartmentFile">Select One File &amp; Upload</button></div>
+              <div class="upload-result hidden" id="uploadResult"></div>
+              <div class="upload-header-check hidden" id="uploadHeaderCheck"></div>
+              <div class="upload-save-actions" id="uploadSaveActions"><span>Select the file, then press Save to make it active.</span><button class="primary" id="saveDepartmentFile" disabled>Save</button></div>
+              <div class="department-file-history">
+                <div class="panel-title"><div><h3>Recent Uploaded Files</h3><p>Material and department files remain separately named and reusable.</p></div><span class="role-chip" id="departmentFileCount">0 FILES</span></div>
+                <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>File Group / Department</th><th>File Name</th><th>Uploaded File</th><th>Type</th><th>Size</th><th>Uploaded By</th><th>Date &amp; Time</th></tr></thead><tbody id="departmentFilesTable"></tbody></table></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel main-admin-only" id="accountManagementPanel">
+            <div class="panel-title"><div><h3>Account Management</h3><p>Create or update an Admin, Sub-Admin or User account. Employee ID is the login username.</p></div></div>
+            <div class="subadmin-form">
+              <label>Full name<input id="subAdminName" placeholder="Employee full name"></label>
+              <label>Employee ID<input id="subAdminEmployeeId" placeholder="Employee ID"></label>
+              <label>Mobile<input id="subAdminMobile" placeholder="Mobile number"></label>
+              <label>Telephone<input id="subAdminTelephone" placeholder="Telephone number"></label>
+              <label>Designation<input id="subAdminDesignation" placeholder="Example: Officer"></label>
+              <label>Company<select id="subAdminCompany"><option value="SFL">SFL</option><option value="SFLFU">SFLFU</option></select></label>
+              <label>Role<select id="subAdminRole"><option value="guest">Guest User</option><option value="standard_user">Standard User</option><option value="power_user">Power User</option><option value="master_user">Master User</option><option value="department_head">Department Head</option><option value="admin">Admin</option></select></label>
+              <label>Department<select id="subAdminDepartment"></select></label>
+              <label>Initial password<div class="password-input"><input type="password" id="subAdminPassword" placeholder="Minimum 6 characters"><button type="button" class="toggle-password" data-password-target="subAdminPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+              <fieldset class="file-permission-field"><legend>File &amp; Module Permission</legend><div id="subAdminFilePermissions"><label><input type="checkbox" value="materials" checked> Fabric Material Code</label><label><input type="checkbox" value="codeRequirement" checked> Code Requirement</label><label><input type="checkbox" value="finishType" checked> Finish Type</label><label><input type="checkbox" value="zkngMaterialUpload" checked> ZKNG Material Upload File</label><label><input type="checkbox" value="lsmwBomUpload" checked> LSMW BOM Upload File</label><label><input type="checkbox" value="routingUploadFormat" checked> Routing Upload File</label><label><input type="checkbox" value="characteristicsUpload" checked> Characteristics Upload File</label><label><input type="checkbox" value="summary" checked> Circular Knitting</label><label><input type="checkbox" value="diaWiseSummary" checked> Dia Wise Summary</label><label><input type="checkbox" value="department" checked> Department Files</label></div></fieldset>
+              <button type="button" class="primary" id="saveSubAdmin">Add / Update Account</button>
+            </div>
+            <div class="subadmin-list" id="subAdminList"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="settings">
+        <div class="panel settings my-password-panel">
+          <div class="panel-title"><div><h3>My Password</h3><p>Every signed-in user can securely change their own password.</p></div></div>
+          <div class="self-password-form">
+            <label>Current password<div class="password-input"><input type="password" id="currentOwnPassword"><button type="button" class="toggle-password" data-password-target="currentOwnPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+            <label>New password<div class="password-input"><input type="password" id="newOwnPassword" placeholder="Minimum 6 characters"><button type="button" class="toggle-password" data-password-target="newOwnPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+            <label>Confirm new password<div class="password-input"><input type="password" id="confirmOwnPassword"><button type="button" class="toggle-password" data-password-target="confirmOwnPassword" title="Show password" aria-label="Show password">◉</button></div></label>
+            <button class="primary" id="changeOwnPassword">Change My Password</button>
+          </div>
+        </div>
+        <div class="panel settings">
+          <div class="panel-title"><div><h3>Shared-folder connection</h3><p>Windows shared-folder permissions continue to control network access.</p></div></div>
+          <label>Network shared folder<div class="path-input"><input id="sharePath"><button class="secondary" id="browseFolder">Browse</button></div></label>
+          <label class="check"><input type="checkbox" id="autoUpdate" checked><span>Automatically check every 5 minutes while LAN is available</span></label>
+          <div class="settings-actions"><button class="secondary" id="reloadAppSettings">↻ Reload Software Window</button><button class="secondary" id="forceUpdate">Force full update</button><button class="primary" id="saveSettings">Save Settings</button></div>
+        </div>
+        <div class="panel software-admin main-admin-only">
+          <div class="panel-title"><div><h3>Software Auto Update</h3><p>Main Admin publishes an approved installer; every ZBOM client detects it automatically.</p></div><span id="currentAppVersion">Current version</span></div>
+          <div class="software-publish">
+            <label>New version<input id="publishVersion" placeholder="Example: 1.0.2"></label>
+            <button class="secondary" id="checkSoftwareUpdate">Check Now</button>
+            <button class="primary" id="publishSoftwareUpdate">Select Installer &amp; Publish</button>
+          </div>
+          <small class="security-note">Every installer is verified with SHA-256 before installation.</small>
+        </div>
+        <div class="panel help"><h3>How it works</h3><ol><li>An authorized Admin uploads the latest department file.</li><li>Users press Update Now, or wait for automatic checking.</li><li>New data is copied into each computer’s offline database.</li><li>LAN can disconnect; search and filtered downloads continue working.</li></ol></div>
+      </section>
+      <footer>ZBOM · Offline ERP Workspace</footer>
+    </main>
+  </div>
+  <div class="admin-login-overlay hidden" id="adminLoginOverlay">
+    <div class="admin-login-card">
+      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <b>ZBOM Account Sign In</b>
+      <p>Sign in with an Admin, Sub-Admin or User account. Access will follow the assigned role.</p>
+      <div class="saved-accounts-group hidden" id="savedAccountsGroup" style="margin-bottom: 10px;">
+        <label style="font-weight: 600; font-size: 10px; color: #0a6ed1;">Saved Accounts on this computer
+          <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+            <select id="savedAccountSelect" style="flex: 1; height: 36px; font-size: 10px; font-weight: 600; border: 1px solid #0a6ed1; background: #f0f7fc; padding: 0 8px; border-radius: 3px;"></select>
+            <button type="button" class="secondary" id="forgetSavedAccount" title="Remove this account from saved accounts" style="height: 36px; padding: 0 10px; font-size: 9px; color: #bb0000; border-color: #e6a5a5; background: #fff5f5;">✕ Forget</button>
+          </div>
+        </label>
+      </div>
+      <label>Employee ID / Username<input id="adminLoginUsername" autocomplete="username" placeholder="Enter employee ID"></label>
+      <label>Password<input type="password" id="adminLoginPassword" autocomplete="current-password" placeholder="Enter password"></label>
+      <label class="remember-login"><input type="checkbox" id="rememberLogin" checked> Save login &amp; password on this computer for quick access</label>
+      <small>Your last successful Employee ID is saved on this computer. Password is protected by Windows encryption.</small>
+      <small class="login-error hidden" id="adminLoginError"></small>
+      <div><button class="secondary registration-link" id="openRegistration">Create Account</button><button class="secondary" id="cancelAdminLogin">Cancel</button><button class="primary" id="confirmAdminLogin">Sign In</button></div>
+    </div>
+  </div>
+  <div class="admin-login-overlay hidden" id="accessRestrictedOverlay">
+    <div class="admin-login-card">
+      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <b>Access Restricted</b>
+      <p>Please log in as <strong>Master User</strong> or <strong>Admin</strong> to access this module.</p>
+      <p style="color:#bb0000;font-size:10px;margin-top:8px;">This module is restricted to authorized personnel only.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:15px;">
+        <button class="secondary" id="cancelAccessRestricted">Cancel</button>
+        <button class="primary" id="goToLoginFromRestricted">Sign In</button>
+      </div>
+    </div>
+  </div>
+  <div class="admin-login-overlay hidden" id="registrationOverlay">
+    <div class="admin-login-card registration-card">
+      <img class="login-logo" src="assets/zcode.ico" alt="ZBOM logo">
+      <b>Create ZBOM Account</b>
+      <p>Create a standard User account. Sub-Admin access requires Main Admin approval.</p>
+      <div class="registration-grid">
+        <label>Full Name *<input id="registerFullName"></label>
+        <label>Employee ID *<input id="registerEmployeeId"></label>
+        <label>Mobile Number *<input id="registerMobile"></label>
+        <label>Telephone Number<input id="registerTelephone"></label>
+        <label>Designation *<input id="registerDesignation"></label>
+        <label>Department *<select id="registerDepartment"></select></label>
+        <label>Company *<select id="registerCompany"><option value="SFL">SFL</option><option value="SFLFU">SFLFU</option></select></label>
+        <label>Password *<div class="password-input"><input type="password" id="registerPassword"><button type="button" class="toggle-password" data-password-target="registerPassword" title="Show password">◉</button></div></label>
+        <label>Confirm Password *<div class="password-input"><input type="password" id="registerConfirmPassword"><button type="button" class="toggle-password" data-password-target="registerConfirmPassword" title="Show password">◉</button></div></label>
+      </div>
+      <label class="registration-request"><input type="checkbox" id="registerRequestSubAdmin"><span>Request Sub-Admin access for this department</span></label>
+      <small class="login-error hidden" id="registrationError"></small>
+      <div><button class="secondary" id="cancelRegistration">Back to Sign In</button><button class="primary" id="submitRegistration">Create Account</button></div>
+    </div>
+  </div>
+  <div class="excel-filter-menu hidden" id="excelFilterMenu">
+    <div class="excel-filter-title"><b id="excelFilterTitle">Column Filter</b><button id="closeExcelFilter">×</button></div>
+    <div class="excel-filter-search"><input id="excelValueSearch" placeholder="Search"></div>
+    <div class="excel-value-panel">
+      <label class="excel-select-all"><input type="checkbox" id="excelSelectAll" checked><span>(Select All)</span></label>
+      <div class="excel-pending-selection" id="excelPendingSelection"></div>
+      <div class="excel-value-list" id="excelValueList"></div>
+    </div>
+  <div class="processing-overlay hidden" id="fileProcessingOverlay" aria-live="polite">
+    <div class="processing-card">
+      <div class="processing-spinner"></div>
+      <h3 id="processingOverlayTitle">Processing File…</h3>
+      <p id="processingOverlayText">File is processing, please wait…</p>
+      <div class="processing-progress-bar"><div class="processing-progress-fill"></div></div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("error", (e) => {
+      console.error("GLOBAL RENDERER ERROR:", e.message, "at", e.filename, ":", e.lineno, e.error ? e.error.stack : "");
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      console.error("UNHANDLED PROMISE REJECTION:", e.reason ? (e.reason.stack || e.reason) : e);
+    });
+    if (!window.erp) {
+      window.erp = {
+        getState: async () => ({
+          config: {}, snapshot: { materials: [], summary: [] }, access: { fullName: "Zakaria Alam Mithu", role: "admin", departments: ["Circular Knitting"], permissions: ["view", "export", "upload", "import", "manage_all_data"] }, departments: ["Circular Knitting"], departmentStatuses: {}, departmentFiles: [], authenticated: true
+        }),
+        getAccessState: async () => ({
+          access: { fullName: "Zakaria Alam Mithu", role: "admin", departments: ["Circular Knitting"], permissions: ["view", "export", "upload", "import", "manage_all_data"] }, departments: ["Circular Knitting"], departmentStatuses: {}, departmentFiles: [], authenticated: true
+        }),
+        getZkngState: async () => ({ masterReady: true, canManageMaster: true, canImport: true, ready: false }),
+        getLsmwBomState: async () => ({ masterReady: true, canManageMaster: true, canImport: true, ready: false }),
+        getCharacteristicsState: async () => ({ masterReady: false, canManageMaster: false, canImport: false, ready: false }),
+        getRoutingState: async () => ({ masterReady: true, canImport: true, ready: false }),
+        recordUsage: async () => {},
+        accountHeartbeat: async () => ({ ok: true })
+      };
+    }
+  </script>
+  <script src="renderer.js"></script>
+</body>
+</html>

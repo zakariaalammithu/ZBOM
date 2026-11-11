@@ -1,0 +1,56 @@
+{
+  "name": "zbom",
+  "version": "1.0.1",
+  "private": true,
+  "description": "ZBOM offline Windows ERP client for knitting material and ZSummary data.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "electron": "37.2.6",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.zbom.app",
+    "productName": "ZBOM",
+    "artifactName": "ZBOM-Setup-${version}.${ext}",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**/*",
+      "seed-data/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "icon": "renderer/assets/zcode.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "installerIcon": "renderer/assets/zcode.ico",
+      "uninstallerIcon": "renderer/assets/zcode.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ZBOM",
+      "perMachine": false
+    }
+  }
+}
