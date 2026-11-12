@@ -3045,6 +3045,7 @@ window.addEventListener("keydown", (event) => {
 $("#addDepartment")?.addEventListener("click", () => submitDepartmentChange("add"));
 $("#renameDepartment")?.addEventListener("click", () => submitDepartmentChange("rename"));
 $("#confirmAdminLogin")?.addEventListener("click", confirmAdminLogin);
+$("#googleSignIn")?.addEventListener("click", () => { window.location.href = "/api/auth/google"; });
 $("#openRegistration")?.addEventListener("click", openRegistration);
 $("#cancelRegistration")?.addEventListener("click", closeRegistration);
 $("#submitRegistration")?.addEventListener("click", submitRegistration);

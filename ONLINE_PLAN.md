@@ -213,6 +213,28 @@ Redeploy), because serverless functions read env vars at deploy time.
 - `scripts/make-admin-hash.cjs` — generates the hash JSON (see above).
 - No password or hash value is stored in any repo file.
 
+### Login with Google (same single admin, no database)
+
+- `api/auth/google.js` — `GET /api/auth/google` redirects to Google's
+  authorization page (`openid email profile`, 10-minute HMAC-signed
+  `state` to prevent CSRF).
+- `api/auth/google/callback.js` — exchanges the code, reads the Google
+  account email, and signs in **only if that email is on the allowlist**
+  (`GOOGLE_ALLOWED_EMAILS`, comma-separated; default: the
+  `ZBOM_ADMIN_USERNAME` value). Any other Google account gets a plain
+  "cannot sign in" page. On success it stores the same HMAC session
+  token as the password login (`sessionStorage "zbom-online-token"`)
+  and returns to `/`. The sign-in dialog has a "Continue with Google"
+  button that goes to `/api/auth/google`.
+- Setup (admin, in Google Cloud Console): APIs & Services →
+  Credentials → Create OAuth client ID → Web application; add both
+  Authorized redirect URIs:
+  `https://bom.b2bgdc.com/api/auth/google/callback` and
+  `https://zbom.vercel.app/api/auth/google/callback`. Then add
+  `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in Vercel and redeploy.
+  Until those two env vars exist, the Google button shows a
+  "not configured yet" page — the email+password login keeps working.
+
 ### Limits (honest)
 
 - **Single admin only** — no other users, no sign-up, no sub-admins.
