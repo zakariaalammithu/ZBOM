@@ -175,7 +175,7 @@ uses the desktop format exactly (PBKDF2-SHA256, 150,000 iterations,
 
 | Name | Value format |
 |---|---|
-| `ZBOM_ADMIN_USERNAME` | Admin username, e.g. `31001625` (default if unset: `31001625`; compared case-insensitively) |
+| `ZBOM_ADMIN_USERNAME` | Admin login email, e.g. `mithusquare@gmail.com` (default if unset: `31001625`; compared case-insensitively) |
 | `ZBOM_ADMIN_PASSWORD_HASH` | JSON `{"salt":"<32 hex chars>","hash":"<64 hex chars>"}` — generate with `node scripts/make-admin-hash.cjs` (reads the password from stdin with echo off, never from argv, never writes it anywhere) |
 | `ZBOM_SESSION_SECRET` | Any long random string (token signing — keep it secret, never commit it) |
 
@@ -189,10 +189,10 @@ Redeploy), because serverless functions read env vars at deploy time.
   `timingSafeEqual`, HMAC-SHA256 session tokens
   (`base64url(payload).base64url(signature)`, payload `{u, role:
   "main_admin", exp}`, 30-minute expiry like desktop
-  `SESSION_TIMEOUT_MS`), and the main-admin access object (username
-  `31001625`, full name "Zakaria Alam Mithu", designation "CTM", all 6
-  departments, the `main_admin` permission set copied from desktop
-  `ROLE_PERMISSIONS`). Missing/malformed env vars make verification
+  `SESSION_TIMEOUT_MS`), and the main-admin access object (username and
+  email are the configured admin login email, full name "Zakaria Alam
+  Mithu", designation "CTM", all 6 departments, the `main_admin`
+  permission set copied from desktop `ROLE_PERMISSIONS`). Missing/malformed env vars make verification
   always fail — never crash, never accept.
 - `api/login.js` — `POST /api/login` `{username, password}` → on success
   `200 {ok:true, token, access}`; wrong username, wrong password, or

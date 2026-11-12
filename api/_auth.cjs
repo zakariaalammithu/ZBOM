@@ -5,7 +5,7 @@
 //
 // Phase 2-lite: ONE admin account only, configured by environment
 // variables (see ONLINE_PLAN.md). There is no user database here.
-//   ZBOM_ADMIN_USERNAME       — admin username (default "31001625")
+//   ZBOM_ADMIN_USERNAME       — admin login email (e.g. mithusquare@gmail.com)
 //   ZBOM_ADMIN_PASSWORD_HASH  — JSON {"salt","hash"} (PBKDF2, see below)
 //   ZBOM_SESSION_SECRET       — long random string used to sign tokens
 //
@@ -48,9 +48,11 @@ const MAIN_ADMIN_PERMISSIONS = [
   "system_control",
 ];
 
-function adminAccess() {
+function adminAccess(username) {
+  const loginId = String(username || "31001625").trim().toLowerCase();
   return {
-    username: "31001625",
+    username: loginId,
+    email: loginId,
     role: "main_admin",
     fullName: "Zakaria Alam Mithu",
     employeeId: "31001625",

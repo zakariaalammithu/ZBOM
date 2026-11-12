@@ -82,5 +82,5 @@ module.exports = async (req, res) => {
     sendJson(res, 401, FAIL);
     return;
   }
-  sendJson(res, 200, { ok: true, token, access: auth.adminAccess() });
+  sendJson(res, 200, { ok: true, token, access: auth.adminAccess(config.username) });
 };

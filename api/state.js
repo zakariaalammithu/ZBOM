@@ -64,7 +64,7 @@ module.exports = (req, res) => {
     const username = auth.verifyToken(match[1].trim(), config.secret);
     if (username && username.toLowerCase() === config.username) {
       authenticated = true;
-      access = auth.adminAccess();
+      access = auth.adminAccess(config.username);
     }
   }
   sendJson(res, 200, {
