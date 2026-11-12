@@ -1376,7 +1376,11 @@ function setConnection(online, message) {
   if (message) $("#sideUpdated").textContent = message;
 }
 
-const RESTRICTED_MODULES = new Set(["zkngMaterialUpload", "lsmwBomUpload", "routingUploadFormat", "characteristicsUpload"]);
+// The four upload modules used to be restricted to Master User / Admin.
+// Since 2026-11-12 they are free for everyone (client-side generation,
+// no login — see web-erp.js and ONLINE_PLAN.md), so the set is empty.
+// To restrict a module again later, add its view id back here.
+const RESTRICTED_MODULES = new Set([]);
 const RESTRICTED_ROLES = new Set(["master_user", "admin", "main_admin"]);
 
 function canAccessRestrictedModule() {

@@ -143,12 +143,9 @@ is deliberate — each needs a database (Phase 2).
 - **Circular Knitting summary + Dia Wise Summary**: no data loaded (0 rows).
 - **Finish Type Short Name**: no data loaded (0 rows).
 - **Code Requirement preview**: empty.
-- **ZKNG / LSMW BOM / Routing / Characteristics generators**: no master
-  upload, no material import, no Ready-file download. Import buttons are
-  disabled (`canImport: false`); the service headers say "Ready" only
-  because the secured templates exist in the repo, not because a file can
-  be generated. Characteristics honestly reports `masterReady: false`
-  (its master is not bundled — desktop admin uploads it).
+- **ZKNG / LSMW BOM / Routing / Characteristics generators**: free for
+  everyone since 2026-11-12 (see "Free upload modules" below) — they
+  run entirely in the browser, no login, no database.
 - **Department workspace**: no department files/statuses/uploads.
 - **Administration**: no sub-admins, role changes, user management, or
   admin dashboard data.
@@ -156,9 +153,10 @@ is deliberate — each needs a database (Phase 2).
   only echoes back, nothing is stored.
 - **Export**: `exportRows` (CSV via Blob) is implemented, but
   `renderer.js` only calls it after a sign-in + export-permission check,
-  so the export buttons open the sign-in dialog in Phase 1. Excel
-  (`.xlsx`) export is not implemented in the browser (no SheetJS loaded);
-  it returns a clear message asking for CSV instead.
+  so the export buttons open the sign-in dialog for guests. SheetJS is
+  now loaded in the browser (for the free upload modules), but
+  `exportRows` itself still produces CSV only — Excel (`.xlsx`) export
+  of search results is not implemented.
 - **Software update, profile photo, "Open folder"**: desktop-only,
   safe no-ops online.
 - **Overview counts**: material count shows the true total (103,710)
@@ -243,9 +241,70 @@ Redeploy), because serverless functions read env vars at deploy time.
 - The desktop admin password (LAN share `ZBOM-Admin/access.json`) is
   **separate** — changing one does not change the other.
 - Everything else from "What does NOT work online yet" still applies:
-  master uploads, ZKNG/LSMW/Routing/Characteristics generation, Circular
-  Knitting summary, Finish Type, Code Requirement, departments,
+  Circular Knitting summary, Finish Type, Code Requirement, departments,
   administration — those still need the full Phase 2 database below.
+  (Master *replacement* also still needs Phase 2; the free upload
+  modules below only generate from the bundled seed masters.)
+
+## Free upload modules — DONE (2026-11-12)
+
+The four upload/generation modules work for **everyone, guests included,
+no login** — the user asked for admin-only access to be free for now and
+will restrict it again later. The navigation gate in `renderer.js`
+(`RESTRICTED_MODULES`) is empty, and `web-erp.js` returns
+`masterReady: true, canManageMaster: true, canImport: true` for all four
+modules. Everything runs **in the browser**: no server, no database, no
+login; the user's file never leaves their computer.
+
+- **How it works**: click "Select & Process File" on ZKNG Material
+  Upload File, LSMW BOM Upload File, Routing Upload File or
+  Characteristics Upload File, pick a Material Code workbook
+  (.xlsx/.xls/.csv). The browser parses it with SheetJS (vendored at
+  `web/vendor/xlsx.full.min.js` — no CDN at runtime), runs the ported
+  desktop logic, keeps the ready file in memory, and downloads it via
+  Blob when "Download Ready File" is clicked. Filenames match the
+  desktop's (`ZKNG Material Upload File - Ready-DD.MM.YYYY.xlsx`,
+  `Routing Upload File - Ready-DD.MM.YYYY.xlsx`, `Characteristics
+  Upload File - Ready-DD.MM.YYYY.xlsx`; LSMW produces four files —
+  `Header_BOM-DD.MM.YYYY.xlsx/.txt` and `Item_BOM-DD.MM.YYYY.xlsx/.txt`
+  — "Download All Files" downloads all four at once).
+- **Ported logic** (`web/web-erp.js`, from `desktop-client/main.cjs`):
+  ZKNG template-row-4 fixed-column copy (G..FF) with B always "ZKNG",
+  C = DESCRIPTION, D = base unit (ST for groups 160013-160020, else
+  KG), E = group, F = net weight or "0", AI = KP10/CC11 storage, BM =
+  standard price (10 for ST, 315 for SD, 375 for YD); Routing lookup
+  by materialType+group+fabricType with `x0000001` operation numbers
+  and the desktop's `"Oeration Description"` typo preserved; LSMW
+  header/item/txt builders with `0.000` formats and `\r\n` txt files;
+  Characteristics maps the Material Code columns onto its fixed 15
+  headers with Plant 8110. Empty/no-row files return `{ok:false,
+  message}` exactly as the desktop does; Routing rows whose key is not
+  in the master are reported as unmatched and block the download (same
+  as desktop).
+- **Masters**: the raw seed workbooks are NOT published. `scripts/
+  build-master-index.cjs` (`npm run build-masters`) extracts only what
+  the matching logic needs into `web/masters-data/` — the ZKNG
+  template rows 1–4 (`zkng-template.json`, 642 cells, 22 KB) and the
+  Routing lookup (`routing-lookup.json`, 76 entries). LSMW and
+  Characteristics need no master. Re-run the script after the seed
+  masters in `desktop-client/seed-data/` change.
+- **Limits (honest)**:
+  - A page reload loses the in-memory ready file — process and download
+    again. Nothing is stored on a server or in localStorage.
+  - The bundled masters are the repo seed files; if the LAN share has
+    newer masters, the site does not see them until the JSON is rebuilt
+    (and a master *replacement* upload still needs Phase 2).
+  - Output matches the desktop structurally (same sheets/columns/rows/
+    values/number formats) but **not the fill colours**: the community
+    SheetJS build drops cell styles on write, and the desktop code
+    itself drops them too (it replaces cell objects wholesale).
+  - Known wart: because `canManageMaster` is true for everyone, the
+    Routing view's "Admin: Routing Master Format" section is visible to
+    guests; its Replace button still returns the honest Phase 2 message.
+    The ZKNG/Characteristics admin sections stay hidden for guests
+    (their renderers also require `isFullAdmin`).
+  - Downloading all four LSMW files at once may make the browser ask
+    to allow multiple downloads; the four single-file buttons still work.
 
 ## Phase 2 — full online system (needs a database)
 
@@ -262,9 +321,11 @@ changes; the work is behind the API.
   Routing/Characteristics templates); upload = admin only; a `masters`
   table records version + updated-at. The LAN share stays as an import
   source, not the live store.
-- Generators: move the `main.cjs` ZKNG / LSMW BOM / Routing /
-  Characteristics logic into API functions that read the masters from
-  Storage and return generated `.xlsx`/`.txt` downloads.
+- Generators: the ZKNG / LSMW BOM / Routing / Characteristics logic
+  already runs client-side for everyone (see "Free upload modules"
+  above). Phase 2 would move it server-side so generation can use the
+  live masters from Storage instead of the bundled seeds, and so the
+  user can restrict it again.
 - Search/summary data: master rows in Postgres (not the JSON index) so
   summary, dia-wise totals and finish-type can be served too.
 - Security: never put a service-role key in the browser; Row Level

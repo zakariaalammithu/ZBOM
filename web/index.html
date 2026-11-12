@@ -172,7 +172,7 @@
         <div class="routing-workspace">
           <div class="routing-hero">
             <div><span>SAP · CHARACTERISTICS PREPARATION</span><h2>Characteristics Upload File</h2><p>Upload a Material Code workbook to generate the SAP Characteristics Upload File formatted for material classification.</p></div>
-            <div class="routing-master-indicator"><small>Characteristics service</small><strong id="characteristicsStatus">Ready</strong><em>Master User &amp; Admin only</em></div>
+            <div class="routing-master-indicator"><small>Characteristics service</small><strong id="characteristicsStatus">Ready</strong><em>Free for everyone</em></div>
           </div>
           <div class="routing-admin-master hidden" id="characteristicsAdminMaster">
             <div class="master-file-control-actions">
@@ -476,6 +476,9 @@
        here is removed on purpose: it fabricated a signed-in admin
        ("Zakaria Alam Mithu", role admin, authenticated: true) with no
        login, which must never exist online. See web-erp.js. -->
+  <!-- ONLINE ONLY: SheetJS (vendored, no CDN) powers the free client-side
+       upload modules in web-erp.js; it must load before web-erp.js. -->
+  <script src="/web/vendor/xlsx.full.min.js"></script>
   <script src="/web/web-erp.js"></script>
   <script>
     window.addEventListener("error", (e) => {
