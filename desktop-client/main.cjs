@@ -723,6 +723,20 @@ async function registerUserAccount(record) {
   registry.subAdmins ||= [];
   registry.subAdmins.push(account);
   registry.version = Date.now();
+  // The account must be saved on the LAN share, so check reachability
+  // first: an offline PC must be told to connect to the LAN, not told
+  // about write permission. A stat on an unreachable UNC path can hang,
+  // so bound it the same way the app bounds its other share reads.
+  const shareReachable = await Promise.race([
+    fsp.stat(config.sharePath).then(() => true).catch(() => false),
+    new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
+  ]);
+  if (!shareReachable) {
+    return {
+      ok: false,
+      message: `The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`,
+    };
+  }
   try {
     await writeJsonAtomic(accessFile(config.sharePath), registry);
     await writeJsonAtomic(userFile("access-cache.json"), registry);
