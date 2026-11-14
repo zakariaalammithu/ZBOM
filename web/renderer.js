@@ -1079,6 +1079,7 @@ let fleeceCalc = loadFleeceCalc();
 
 function fleeceDefaultState() {
   return {
+    type: "threeNoFilament",
     threeNoFilament: { faceCount: 28, faceSl: 4.9, binderSl: 3.85, backCount: 5, backSl: 1.95 },
     twoThread: { faceCount: 8, faceSl: 5, backCount: 10, backSl: 2 },
     threeFilament: { faceCount: 24, faceSl: 4.4, filamentDenier: 75, filamentSl: 2.75, backCount: 10, backSl: 1.6 },
@@ -1091,6 +1092,7 @@ function loadFleeceCalc() {
     const parsed = JSON.parse(raw);
     const base = fleeceDefaultState();
     return {
+      type: ["threeNoFilament", "twoThread", "threeFilament"].includes(parsed.type) ? parsed.type : base.type,
       threeNoFilament: { ...base.threeNoFilament, ...(parsed.threeNoFilament || {}) },
       twoThread: { ...base.twoThread, ...(parsed.twoThread || {}) },
       threeFilament: { ...base.threeFilament, ...(parsed.threeFilament || {}) },
@@ -1115,6 +1117,11 @@ function fleeceSetText(id, text) {
   if (el) el.textContent = text;
 }
 function renderFleeceCalculation() {
+  const typeSelect = $("#fleeceTypeSelect");
+  if (typeSelect) typeSelect.value = fleeceCalc.type || "threeNoFilament";
+  $("#fleecePanelThreeNoFilament")?.classList.toggle("hidden", fleeceCalc.type !== "threeNoFilament");
+  $("#fleecePanelTwoThread")?.classList.toggle("hidden", fleeceCalc.type !== "twoThread");
+  $("#fleecePanelThreeFilament")?.classList.toggle("hidden", fleeceCalc.type !== "threeFilament");
   const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
   const setVal = (id, value) => { const el = $(id); if (el) el.value = value ?? ""; };
   setVal("#fl1FaceCount", s1.faceCount);
@@ -3021,6 +3028,11 @@ $("#prodProductionMachine")?.addEventListener("change", prodUpdateReverseResults
 $("#prodTargetProduction")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodTargetProduction").value); if (Number.isFinite(v)) { prodCalc.targetProduction = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
 $("#prodCounterInput")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodCounterInput").value); if (Number.isFinite(v)) { prodCalc.counterInput = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
 // Fleece Fabric Calculation listeners (inputs are the yellow cells in the sheet)
+$("#fleeceTypeSelect")?.addEventListener("change", (event) => {
+  fleeceCalc.type = event.target.value;
+  saveFleeceCalc();
+  renderFleeceCalculation();
+});
 $("#fleeceCalculation")?.addEventListener("input", (event) => {
   const input = event.target.closest("input");
   if (!input || input.readOnly) return;

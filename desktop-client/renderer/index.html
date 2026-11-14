@@ -339,7 +339,17 @@
         <div class="dia-summary-heading">
           <div><span>CIRCULAR KNITTING</span><h2>Fleece Fabric Calculation</h2><p>Yarn percentage share for fleece — enter Yarn Count and Stitch Length only; the rest is calculated automatically.</p></div>
         </div>
-        <div class="panel fleece-panel">
+        <div class="panel prod-calc-panel">
+          <div class="panel-title"><div><h3>Fleece Type</h3><p>Select a fleece type to calculate its yarn percentage. Only Yarn Count and Stitch Length need to be entered.</p></div></div>
+          <div class="prod-calc-filter-row">
+            <label>Fleece Type<select id="fleeceTypeSelect">
+              <option value="threeNoFilament">Fleece</option>
+              <option value="twoThread">Two Thread Fleece</option>
+              <option value="threeFilament">Three Thread Fleece</option>
+            </select></label>
+          </div>
+        </div>
+        <div class="panel fleece-panel" id="fleecePanelThreeNoFilament">
           <div class="panel-title"><div><h3>Three-Thread Fleece — Filament Not Used</h3><p>Face Loop + Binder + Back Loop. The Binder count follows the Face Loop count automatically, as in the sheet.</p></div></div>
           <div class="fleece-grid">
             <div class="fleece-yarn">
@@ -362,7 +372,7 @@
             </div>
           </div>
         </div>
-        <div class="panel fleece-panel">
+        <div class="panel fleece-panel" id="fleecePanelTwoThread">
           <div class="panel-title"><div><h3>Two-Thread Fleece</h3><p>Face Loop + Back Loop.</p></div></div>
           <div class="fleece-grid two">
             <div class="fleece-yarn">
@@ -379,7 +389,7 @@
             </div>
           </div>
         </div>
-        <div class="panel fleece-panel">
+        <div class="panel fleece-panel" id="fleecePanelThreeFilament">
           <div class="panel-title"><div><h3>Three-Thread Fleece — Filament Used</h3><p>Face Loop + Filament Binder + Back Loop.</p></div></div>
           <div class="fleece-grid">
             <div class="fleece-yarn">
