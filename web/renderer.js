@@ -1061,6 +1061,101 @@ function prodAddFabric(name) {
   showNotice(`${clean} production calculation added.`, "success");
 }
 
+
+// ---- Fleece Fabric Calculation (Circular Knitting) ----
+// Formulae from the user's FLEECE_YARN___CALCULATION.xlsx (sheet "Fleece").
+// Each yarn's share of the total yarn weight is (Stitch Length / Yarn Count)
+// divided by the sum of (Stitch Length / Yarn Count) over all yarns, x 100.
+// For filament the (S/L / Count) term is (S/L x Denier / 5315) instead.
+// Three blocks in the sheet, all shown in this one section:
+//   1. Three-thread fleece, filament NOT used: Face Loop + Binder + Back Loop
+//      (Binder count = Face Loop count, as in the sheet's D4 = A4).
+//   2. Two-thread fleece: Face Loop + Back Loop.
+//   3. Three-thread fleece, filament USED: Face Loop + Filament Binder + Back Loop.
+// Only Yarn Count and Stitch Length are inputs (the yellow cells in the sheet);
+// every percentage is calculated automatically.
+const FLEECE_STORAGE_KEY = "zbom-fleece-calculation-v1";
+let fleeceCalc = loadFleeceCalc();
+
+function fleeceDefaultState() {
+  return {
+    threeNoFilament: { faceCount: 28, faceSl: 4.9, binderSl: 3.85, backCount: 5, backSl: 1.95 },
+    twoThread: { faceCount: 8, faceSl: 5, backCount: 10, backSl: 2 },
+    threeFilament: { faceCount: 24, faceSl: 4.4, filamentDenier: 75, filamentSl: 2.75, backCount: 10, backSl: 1.6 },
+  };
+}
+function loadFleeceCalc() {
+  try {
+    const raw = window.localStorage.getItem(FLEECE_STORAGE_KEY);
+    if (!raw) return fleeceDefaultState();
+    const parsed = JSON.parse(raw);
+    const base = fleeceDefaultState();
+    return {
+      threeNoFilament: { ...base.threeNoFilament, ...(parsed.threeNoFilament || {}) },
+      twoThread: { ...base.twoThread, ...(parsed.twoThread || {}) },
+      threeFilament: { ...base.threeFilament, ...(parsed.threeFilament || {}) },
+    };
+  } catch (e) {
+    return fleeceDefaultState();
+  }
+}
+function saveFleeceCalc() {
+  try { window.localStorage.setItem(FLEECE_STORAGE_KEY, JSON.stringify(fleeceCalc)); } catch (e) {}
+}
+function fleeceShare(parts) {
+  const total = parts.reduce((sum, part) => sum + (Number.isFinite(part) && part > 0 ? part : 0), 0);
+  if (!(total > 0)) return parts.map(() => NaN);
+  return parts.map((part) => (Number.isFinite(part) && part > 0 ? part : NaN) / total * 100);
+}
+function fleecePct(value) {
+  return Number.isFinite(value) ? `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : "—";
+}
+function fleeceSetText(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+function renderFleeceCalculation() {
+  const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
+  const setVal = (id, value) => { const el = $(id); if (el) el.value = value ?? ""; };
+  setVal("#fl1FaceCount", s1.faceCount);
+  setVal("#fl1FaceSl", s1.faceSl);
+  setVal("#fl1BinderSl", s1.binderSl);
+  setVal("#fl1BackCount", s1.backCount);
+  setVal("#fl1BackSl", s1.backSl);
+  setVal("#fl2FaceCount", s2.faceCount);
+  setVal("#fl2FaceSl", s2.faceSl);
+  setVal("#fl2BackCount", s2.backCount);
+  setVal("#fl2BackSl", s2.backSl);
+  setVal("#fl3FaceCount", s3.faceCount);
+  setVal("#fl3FaceSl", s3.faceSl);
+  setVal("#fl3FilamentDenier", s3.filamentDenier);
+  setVal("#fl3FilamentSl", s3.filamentSl);
+  setVal("#fl3BackCount", s3.backCount);
+  setVal("#fl3BackSl", s3.backSl);
+  fleeceRecalcAll();
+}
+function fleeceRecalcAll() {
+  const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
+  const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : NaN; };
+  // Block 1: binder count follows the face count (sheet D4 = A4).
+  setVal1BinderCount();
+  const [f1, b1, k1] = fleeceShare([n(s1.faceSl) / n(s1.faceCount), n(s1.binderSl) / n(s1.faceCount), n(s1.backSl) / n(s1.backCount)]);
+  fleeceSetText("#fl1FacePct", fleecePct(f1));
+  fleeceSetText("#fl1BinderPct", fleecePct(b1));
+  fleeceSetText("#fl1BackPct", fleecePct(k1));
+  const [f2, k2] = fleeceShare([n(s2.faceSl) / n(s2.faceCount), n(s2.backSl) / n(s2.backCount)]);
+  fleeceSetText("#fl2FacePct", fleecePct(f2));
+  fleeceSetText("#fl2BackPct", fleecePct(k2));
+  const [f3, b3, k3] = fleeceShare([n(s3.faceSl) / n(s3.faceCount), (n(s3.filamentSl) * n(s3.filamentDenier)) / 5315, n(s3.backSl) / n(s3.backCount)]);
+  fleeceSetText("#fl3FacePct", fleecePct(f3));
+  fleeceSetText("#fl3BinderPct", fleecePct(b3));
+  fleeceSetText("#fl3BackPct", fleecePct(k3));
+}
+function setVal1BinderCount() {
+  const el = $("#fl1BinderCount");
+  if (el) el.value = fleeceCalc.threeNoFilament.faceCount ?? "";
+}
+
 function renderDiaWiseSummary() {
   const source = state.snapshot.diaWiseSummary || [];
   const term = normalizedSearchText($("#diaSummarySearch")?.value || "");
@@ -1615,7 +1710,7 @@ function changeView(view) {
     const previousLabel = {
       dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File",
       routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", finishType: "Finish Type Short Name",
-      summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", department: state.department || "Department Workspace",
+      summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", fleeceCalculation: "Fleece Fabric Calculation", department: state.department || "Department Workspace",
       administration: "Administration", settings: "Settings",
     }[previousView] || previousView;
     if (previousView && window.erp && typeof window.erp.recordUsage === "function") {
@@ -1646,6 +1741,7 @@ function changeView(view) {
         summary: state.departments[0] || "Circular Knitting",
         diaWiseSummary: "Dia Wise Summary",
         productionCalculation: "Production Calculation",
+        fleeceCalculation: "Fleece Fabric Calculation",
         department: state.department || "Department Workspace",
         administration: "Administration",
         settings: "Settings",
@@ -1667,6 +1763,7 @@ function changeView(view) {
     }
     if (view === "diaWiseSummary") renderDiaWiseSummary();
     if (view === "productionCalculation") renderProductionCalculation();
+    if (view === "fleeceCalculation") renderFleeceCalculation();
     if (view === "finishType") renderFinishType();
     if (view === "routingUploadFormat") refreshRoutingState();
     if (view === "zkngMaterialUpload") refreshZkngState();
@@ -2265,7 +2362,7 @@ function renderAccess() {
   const isFullAdmin = isMainAdmin || state.access.role === "admin";
   const isAuthorizedUploadRole = ["power_user", "master_user", "department_head", "admin", "main_admin"].includes(state.access.role) || (state.access.permissions || []).includes("upload");
   const canUpload = isAuthorizedUploadRole;
-  const allowedFiles = Array.isArray(state.access.filePermissions) ? state.access.filePermissions : ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "department"];
+  const allowedFiles = Array.isArray(state.access.filePermissions) ? state.access.filePermissions : ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "fleeceCalculation", "department"];
 
   $$(".admin-upload-btn, [data-admin-upload]").forEach((button) => {
     button.classList.toggle("hidden", !isAuthorizedUploadRole);
@@ -2333,7 +2430,7 @@ function renderAccess() {
   $("#zkngMaterialUploadNav")?.classList.remove("hidden");
   $("#lsmwBomUploadNav")?.classList.remove("hidden");
   $("#characteristicsUploadNav")?.classList.remove("hidden");
-  $("#primarySummaryNav")?.classList.toggle("hidden", !["summary", "diaWiseSummary", "productionCalculation"].some((id) => allowedFiles.includes(id)));
+  $("#primarySummaryNav")?.classList.toggle("hidden", !["summary", "diaWiseSummary", "productionCalculation", "fleeceCalculation"].some((id) => allowedFiles.includes(id)));
   $$('[data-view="department"]').forEach((button) => button.classList.toggle("hidden", !allowedFiles.includes("department")));
   renderSubAdmins();
   renderDepartmentFiles();
@@ -2923,6 +3020,29 @@ $("#prodCounterMachine")?.addEventListener("change", prodUpdateReverseResults);
 $("#prodProductionMachine")?.addEventListener("change", prodUpdateReverseResults);
 $("#prodTargetProduction")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodTargetProduction").value); if (Number.isFinite(v)) { prodCalc.targetProduction = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
 $("#prodCounterInput")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodCounterInput").value); if (Number.isFinite(v)) { prodCalc.counterInput = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
+// Fleece Fabric Calculation listeners (inputs are the yellow cells in the sheet)
+$("#fleeceCalculation")?.addEventListener("input", (event) => {
+  const input = event.target.closest("input");
+  if (!input || input.readOnly) return;
+  const map = {
+    fl1FaceCount: ["threeNoFilament", "faceCount"], fl1FaceSl: ["threeNoFilament", "faceSl"],
+    fl1BinderSl: ["threeNoFilament", "binderSl"], fl1BackCount: ["threeNoFilament", "backCount"],
+    fl1BackSl: ["threeNoFilament", "backSl"],
+    fl2FaceCount: ["twoThread", "faceCount"], fl2FaceSl: ["twoThread", "faceSl"],
+    fl2BackCount: ["twoThread", "backCount"], fl2BackSl: ["twoThread", "backSl"],
+    fl3FaceCount: ["threeFilament", "faceCount"], fl3FaceSl: ["threeFilament", "faceSl"],
+    fl3FilamentDenier: ["threeFilament", "filamentDenier"], fl3FilamentSl: ["threeFilament", "filamentSl"],
+    fl3BackCount: ["threeFilament", "backCount"], fl3BackSl: ["threeFilament", "backSl"],
+  };
+  const entry = map[input.id];
+  if (!entry) return;
+  const value = parseFloat(input.value);
+  if (!Number.isFinite(value)) return;
+  fleeceCalc[entry[0]][entry[1]] = value;
+  saveFleeceCalc();
+  fleeceRecalcAll();
+});
+
 
 $$("[data-material-column]").forEach((input) =>
   input.addEventListener("input", debounce(() => refreshFilteredTable("materials"))),
@@ -3408,7 +3528,7 @@ async function performLogoutAndSwitchUser() {
     designation: "",
     departments: [],
     permissions: ["view"],
-    filePermissions: ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "department"],
+    filePermissions: ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "fleeceCalculation", "department"],
   };
   state.profileImageDataUrl = "";
   state.logoutCompletedAt = Date.now();
@@ -3716,7 +3836,7 @@ $$(".export").forEach((button) => button.addEventListener("click", () => exportC
 initialize().catch((error) => showNotice(`Software could not start: ${error.message}`, "warning"));
 window.setInterval(async () => {
   const seconds = Math.max(1, Math.round((Date.now() - (state.viewStartedAt || Date.now())) / 1000));
-  const currentLabel = { dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File", routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", zkngMaterialUpload: "ZKNG Material Upload File", lsmwBomUpload: "LSMW BOM Upload File", finishType: "Finish Type Short Name", summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", department: state.department || "Department Workspace", administration: "Administration", settings: "Settings" }[state.view] || state.view;
+  const currentLabel = { dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File", routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", zkngMaterialUpload: "ZKNG Material Upload File", lsmwBomUpload: "LSMW BOM Upload File", finishType: "Finish Type Short Name", summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", fleeceCalculation: "Fleece Fabric Calculation", department: state.department || "Department Workspace", administration: "Administration", settings: "Settings" }[state.view] || state.view;
   window.erp.recordUsage({ module: currentLabel, seconds, count: false, file: state.departmentStatuses?.[state.department]?.file || "" }).catch(() => {});
   state.viewStartedAt = Date.now();
   const result = await window.erp.accountHeartbeat();
