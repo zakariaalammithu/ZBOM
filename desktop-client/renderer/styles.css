@@ -419,3 +419,27 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+.prod-calc-panel{margin-bottom:12px}
+.prod-calc-filter-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:12px}
+.prod-calc-filter-row label{display:grid;gap:4px;color:#52616e;font-size:9px;font-weight:600}
+.prod-calc-filter-row select,.prod-calc-filter-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:150px}
+.prod-calc-filter-row button{height:34px}
+.prod-calc-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.prod-calc-add input{height:34px;border:1px solid #a8b3bd;padding:0 9px;min-width:220px}
+.prod-calc-add small{color:var(--muted);font-size:9px}
+.prod-quick-add{display:flex;gap:6px;align-items:center;font-size:9px;color:var(--muted)}
+.prod-quick-add button{height:26px;border:1px solid var(--blue);background:#fff;color:var(--blue);border-radius:3px;padding:0 10px;cursor:pointer}
+.prod-calc-notice{margin-top:12px;padding:11px 13px;background:#fff8e1;border:1px solid #eadbaa;color:#755d29;font-size:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.prod-calc-notice button{height:30px}
+#prodTable input{width:96px;height:30px;border:1px solid #a8b3bd;padding:0 8px;font-size:10px}
+#prodTable input:focus{border-color:var(--blue);outline:0;box-shadow:0 0 0 1px var(--blue)}
+#prodTable .prod-result{font-weight:700;color:var(--deep);white-space:nowrap}
+.prod-calc-actions{display:flex;gap:8px;align-items:center;margin:12px 0}
+.prod-total{margin-left:auto;font-size:11px;color:#354a5f}
+.prod-total b{font-size:14px;color:var(--deep)}
+.prod-reverse{grid-template-columns:repeat(2,1fr)}
+.prod-reverse label{display:grid;gap:4px;color:var(--muted);font-size:9px;font-weight:600;margin:10px 0}
+.prod-reverse select,.prod-reverse input{height:32px;border:1px solid #a8b3bd;padding:0 8px;font-size:11px}
+.prod-reverse b{display:block;font-size:19px;font-weight:400;margin:6px 0;color:var(--deep)}
+.prod-formula{margin-top:12px;color:var(--muted);font-size:9px;line-height:1.7}

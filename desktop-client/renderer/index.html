@@ -33,6 +33,7 @@
         <button data-view="summary" id="primarySummaryNav" class="expanded"><i>▥</i> <span>Circular Knitting</span><em class="nav-expand-arrow">›</em></button>
         <div class="submodule-group" id="summarySubmodules">
           <button class="submodule-nav" data-view="diaWiseSummary"><i>└</i> Dia Wise Summary</button>
+          <button class="submodule-nav" data-view="productionCalculation"><i>└</i> Production Calculation</button>
         </div>
         <div class="department-nav" id="departmentNav"></div>
         <small class="nav-group">MANAGEMENT</small>
@@ -278,6 +279,60 @@
         </div>
       </section>
 
+
+      <section class="view" id="productionCalculation">
+        <div class="dia-summary-heading">
+          <div><span>CIRCULAR KNITTING</span><h2>Production Calculation</h2><p>Production per shift from machine settings — Single Jersey &amp; Pique formula from the Production Calculation sheet.</p></div>
+        </div>
+        <div class="panel prod-calc-panel">
+          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its production. Single Jersey and Pique are ready now — add Rib, Interlock or any other fabric below.</p></div></div>
+          <div class="prod-calc-filter-row">
+            <label>Fabric<select id="prodFabricSelect"></select></label>
+            <label>Shift Hours<input id="prodShiftHours" type="number" min="1" max="24" step="0.5" value="8"></label>
+            <label>Efficiency %<input id="prodEfficiency" type="number" min="1" max="100" step="1" value="90"></label>
+            <button class="secondary" id="prodAddFabricToggle" type="button">+ Add Fabric</button>
+          </div>
+          <div class="prod-calc-add hidden" id="prodAddFabricPanel">
+            <input id="prodNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
+            <button class="primary" id="prodAddFabricBtn" type="button">Add Fabric Calculation</button>
+            <span class="prod-quick-add">Quick add: <button type="button" data-add-fabric="Rib">Rib</button><button type="button" data-add-fabric="Interlock">Interlock</button></span>
+            <small>Added fabrics use the same standard circular-knitting formula as Single Jersey &amp; Pique.</small>
+          </div>
+          <div class="prod-calc-notice hidden" id="prodFabricNotice"></div>
+        </div>
+        <div id="prodCalcBody">
+          <div class="table-card">
+            <div class="table-meta"><b id="prodMatches">1 machine</b><span>Production is calculated live as you type</span></div>
+            <div class="table-scroll"><table id="prodTable">
+              <thead><tr><th>M/C No</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Dia (inch)</th><th>Gauge</th><th>No of Feeder</th><th>RPM</th><th>Production / Shift (kg)</th><th></th></tr></thead>
+              <tbody id="prodTableBody"></tbody>
+            </table></div>
+          </div>
+          <div class="prod-calc-actions">
+            <button class="secondary" id="prodAddMachine" type="button">+ Add Machine</button>
+            <button class="secondary" id="prodReset" type="button">Reset to Sample</button>
+            <span class="prod-total">Total Production / Shift: <b id="prodTotal">0 kg</b></span>
+          </div>
+          <div class="summary-cards prod-reverse">
+            <div>
+              <small>Counter from Production</small>
+              <label>Machine<select id="prodCounterMachine"></select></label>
+              <label>Target Production (kg)<input id="prodTargetProduction" type="number" min="0" step="0.1" value="10"></label>
+              <b id="prodCounterResult">—</b>
+              <small>Theoretical counter revolutions for the target production (100% efficiency).</small>
+            </div>
+            <div>
+              <small>Production from Counter</small>
+              <label>Machine<select id="prodProductionMachine"></select></label>
+              <label>Counter (rev)<input id="prodCounterInput" type="number" min="0" step="1" value="1100"></label>
+              <b id="prodProductionResult">—</b>
+              <small>Theoretical production for the counter reading (100% efficiency).</small>
+            </div>
+          </div>
+          <p class="prod-formula">Production / Shift (kg) = π × Dia × Gauge × Stitch Length × Feeders × RPM × 60 × Shift Hours × Efficiency ÷ (25.4 × 36 × 840 × Yarn Count × 2.2046) &nbsp;·&nbsp; Counter (rev) = Production × 25.4 × 36 × 840 × Yarn Count × 2.2046 ÷ (π × Dia × Gauge × Feeders × Stitch Length)</p>
+        </div>
+      </section>
+
       <section class="view" id="department">
         <div class="department-workspace">
           <div class="module-update-bar"><span><i></i><b id="departmentUpdateTitle">Department</b></span><span>Last updated: <strong id="departmentFileUpdated">Not updated yet</strong></span><small id="departmentFileName">No file uploaded</small></div>
@@ -362,7 +417,7 @@
               <label>Role<select id="subAdminRole"><option value="guest">Guest User</option><option value="standard_user">Standard User</option><option value="power_user">Power User</option><option value="master_user">Master User</option><option value="department_head">Department Head</option><option value="admin">Admin</option></select></label>
               <label>Department<select id="subAdminDepartment"></select></label>
               <label>Initial password<div class="password-input"><input type="password" id="subAdminPassword" placeholder="Minimum 6 characters"><button type="button" class="toggle-password" data-password-target="subAdminPassword" title="Show password" aria-label="Show password">◉</button></div></label>
-              <fieldset class="file-permission-field"><legend>File &amp; Module Permission</legend><div id="subAdminFilePermissions"><label><input type="checkbox" value="materials" checked> Fabric Material Code</label><label><input type="checkbox" value="codeRequirement" checked> Code Requirement</label><label><input type="checkbox" value="finishType" checked> Finish Type</label><label><input type="checkbox" value="zkngMaterialUpload" checked> ZKNG Material Upload File</label><label><input type="checkbox" value="lsmwBomUpload" checked> LSMW BOM Upload File</label><label><input type="checkbox" value="routingUploadFormat" checked> Routing Upload File</label><label><input type="checkbox" value="characteristicsUpload" checked> Characteristics Upload File</label><label><input type="checkbox" value="summary" checked> Circular Knitting</label><label><input type="checkbox" value="diaWiseSummary" checked> Dia Wise Summary</label><label><input type="checkbox" value="department" checked> Department Files</label></div></fieldset>
+              <fieldset class="file-permission-field"><legend>File &amp; Module Permission</legend><div id="subAdminFilePermissions"><label><input type="checkbox" value="materials" checked> Fabric Material Code</label><label><input type="checkbox" value="codeRequirement" checked> Code Requirement</label><label><input type="checkbox" value="finishType" checked> Finish Type</label><label><input type="checkbox" value="zkngMaterialUpload" checked> ZKNG Material Upload File</label><label><input type="checkbox" value="lsmwBomUpload" checked> LSMW BOM Upload File</label><label><input type="checkbox" value="routingUploadFormat" checked> Routing Upload File</label><label><input type="checkbox" value="characteristicsUpload" checked> Characteristics Upload File</label><label><input type="checkbox" value="summary" checked> Circular Knitting</label><label><input type="checkbox" value="diaWiseSummary" checked> Dia Wise Summary</label><label><input type="checkbox" value="productionCalculation" checked> Production Calculation</label><label><input type="checkbox" value="department" checked> Department Files</label></div></fieldset>
               <button type="button" class="primary" id="saveSubAdmin">Add / Update Account</button>
             </div>
             <div class="subadmin-list" id="subAdminList"></div>

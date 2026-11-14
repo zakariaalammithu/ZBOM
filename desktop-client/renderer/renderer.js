@@ -860,6 +860,207 @@ function renderSummary() {
   updateExportLabels("summary");
 }
 
+
+// ---- Production Calculation (Circular Knitting) ----
+// Formulae from the user's Production_Calculation.xls (sheet "S.J or Pique"):
+//   Production / shift (kg) = PI * Dia * Gauge * StitchLength * Feeders * RPM * 60 * shiftHours * efficiency
+//                             / (25.4 * 36 * 840 * YarnCount * 2.2046)
+//   Counter (rev)           = Production * 25.4 * 36 * 840 * YarnCount * 2.2046
+//                             / (PI * Dia * Gauge * Feeders * StitchLength)
+//   Production from counter = PI * Dia * Gauge * StitchLength * Feeders * Counter
+//                             / (25.4 * 36 * 840 * YarnCount * 2.2046)
+// The two counter conversions in the sheet carry no efficiency factor (theoretical,
+// 100% efficiency); only the per-shift production uses the efficiency.
+// The same standard formula applies to every circular-knitting fabric, so a fabric
+// added later (Rib, Interlock, ...) reuses it with its own machine rows.
+const PROD_PI = 3.1416;
+const PROD_MM_PER_INCH = 25.4;
+const PROD_INCH_PER_YARD = 36;
+const PROD_YARDS_PER_HANK = 840;
+const PROD_LB_PER_KG = 2.2046;
+const PROD_BUILTIN_FABRICS = ["Single Jersey", "Pique"];
+const PROD_SUGGESTED_FABRICS = ["Rib", "Interlock"];
+const PROD_STORAGE_KEY = "zbom-production-calculation-v1";
+const PROD_SAMPLE_ROW = { machine: "1", count: 50, stitchLength: 2.2, dia: 30, gauge: 28, feeders: 96, rpm: 25 };
+let prodCalc = loadProdCalc();
+
+function prodDefaultState() {
+  return {
+    fabric: "Single Jersey",
+    shiftHours: 8,
+    efficiency: 90,
+    targetProduction: 10,
+    counterInput: 1100,
+    addedFabrics: [],
+    rows: { "Single Jersey": [{ ...PROD_SAMPLE_ROW }], Pique: [{ ...PROD_SAMPLE_ROW }] },
+  };
+}
+function loadProdCalc() {
+  try {
+    const raw = window.localStorage.getItem(PROD_STORAGE_KEY);
+    if (!raw) return prodDefaultState();
+    const parsed = JSON.parse(raw);
+    const base = prodDefaultState();
+    const merged = { ...base, ...parsed, rows: { ...base.rows, ...(parsed.rows || {}) } };
+    merged.addedFabrics = (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !PROD_BUILTIN_FABRICS.includes(name));
+    PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
+    merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
+    return merged;
+  } catch (e) {
+    return prodDefaultState();
+  }
+}
+function saveProdCalc() {
+  try { window.localStorage.setItem(PROD_STORAGE_KEY, JSON.stringify(prodCalc)); } catch (e) {}
+}
+function prodEsc(value) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function prodAvailableFabrics() { return [...PROD_BUILTIN_FABRICS, ...prodCalc.addedFabrics]; }
+function prodRows() { return prodCalc.rows[prodCalc.fabric] || []; }
+function prodNum(value) { const n = parseFloat(value); return Number.isFinite(n) ? n : NaN; }
+function prodProductionPerShift(row) {
+  const count = prodNum(row.count), sl = prodNum(row.stitchLength), dia = prodNum(row.dia);
+  const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders), rpm = prodNum(row.rpm);
+  if ([count, sl, dia, gauge, feeders, rpm].some((v) => !Number.isFinite(v) || v <= 0)) return NaN;
+  const eff = prodCalc.efficiency / 100, hours = prodCalc.shiftHours;
+  if (!Number.isFinite(eff) || eff <= 0 || !Number.isFinite(hours) || hours <= 0) return NaN;
+  return (PROD_PI * dia * gauge * sl * feeders * rpm * 60 * hours * eff)
+    / (PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG);
+}
+function prodCounterFromProduction(row, kg) {
+  const count = prodNum(row.count), sl = prodNum(row.stitchLength), dia = prodNum(row.dia);
+  const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders);
+  if ([count, sl, dia, gauge, feeders].some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(kg) || kg < 0) return NaN;
+  return (kg * PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG)
+    / (PROD_PI * dia * gauge * feeders * sl);
+}
+function prodProductionFromCounter(row, counter) {
+  const count = prodNum(row.count), sl = prodNum(row.stitchLength), dia = prodNum(row.dia);
+  const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders);
+  if ([count, sl, dia, gauge, feeders].some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(counter) || counter < 0) return NaN;
+  return (PROD_PI * dia * gauge * sl * feeders * counter)
+    / (PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG);
+}
+function prodFmt(value, decimals = 2) {
+  return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "—";
+}
+function prodKg(value) {
+  return Number.isFinite(value) ? `${prodFmt(value)} kg` : "—";
+}
+function prodFillFabricSelect() {
+  const select = $("#prodFabricSelect");
+  if (!select) return;
+  const available = prodAvailableFabrics();
+  const pending = PROD_SUGGESTED_FABRICS.filter((name) => !available.includes(name));
+  let html = `<optgroup label="Ready">` + available.map((name) => `<option value="${prodEsc(name)}">${prodEsc(name)}</option>`).join("") + `</optgroup>`;
+  if (pending.length) html += `<optgroup label="Not added yet">` + pending.map((name) => `<option value="${prodEsc(name)}">${prodEsc(name)} — not added yet</option>`).join("") + `</optgroup>`;
+  select.innerHTML = html;
+  select.value = prodCalc.fabric;
+  if (select.value !== prodCalc.fabric) select.value = available[0];
+}
+function renderProductionCalculation() {
+  prodFillFabricSelect();
+  const shiftInput = $("#prodShiftHours"), effInput = $("#prodEfficiency");
+  if (shiftInput) shiftInput.value = prodCalc.shiftHours;
+  if (effInput) effInput.value = prodCalc.efficiency;
+  const ready = prodAvailableFabrics().includes(prodCalc.fabric);
+  $("#prodCalcBody")?.classList.toggle("hidden", !ready);
+  const notice = $("#prodFabricNotice");
+  if (notice) {
+    notice.classList.toggle("hidden", ready);
+    if (!ready) {
+      notice.innerHTML = `Production calculation for <b>${prodEsc(prodCalc.fabric)}</b> is not added yet. <button type="button" class="secondary" id="prodAddThisFabric">Add ${prodEsc(prodCalc.fabric)} Calculation</button>`;
+      $("#prodAddThisFabric")?.addEventListener("click", () => prodAddFabric(prodCalc.fabric));
+    }
+  }
+  if (ready) {
+    renderProdTable();
+    renderProdReverse();
+  }
+}
+function renderProdTable() {
+  const body = $("#prodTableBody");
+  if (!body) return;
+  const rows = prodRows();
+  body.innerHTML = rows.map((row, i) => `
+    <tr data-row="${i}">
+      <td><input data-field="machine" value="${prodEsc(row.machine ?? "")}" inputmode="numeric"></td>
+      <td><input data-field="count" type="number" min="0" step="any" value="${prodEsc(row.count ?? "")}"></td>
+      <td><input data-field="stitchLength" type="number" min="0" step="any" value="${prodEsc(row.stitchLength ?? "")}"></td>
+      <td><input data-field="dia" type="number" min="0" step="any" value="${prodEsc(row.dia ?? "")}"></td>
+      <td><input data-field="gauge" type="number" min="0" step="any" value="${prodEsc(row.gauge ?? "")}"></td>
+      <td><input data-field="feeders" type="number" min="0" step="1" value="${prodEsc(row.feeders ?? "")}"></td>
+      <td><input data-field="rpm" type="number" min="0" step="any" value="${prodEsc(row.rpm ?? "")}"></td>
+      <td class="prod-result" data-result="${i}">${prodKg(prodProductionPerShift(row))}</td>
+      <td><button type="button" class="secondary prod-remove-row" data-row="${i}" title="Remove machine">✕</button></td>
+    </tr>`).join("");
+  prodUpdateTotals();
+}
+function prodUpdateTotals() {
+  const rows = prodRows();
+  const total = rows.reduce((sum, row) => sum + (prodProductionPerShift(row) || 0), 0);
+  const totalEl = $("#prodTotal");
+  if (totalEl) totalEl.textContent = `${prodFmt(total)} kg`;
+  const matches = $("#prodMatches");
+  if (matches) matches.textContent = `${rows.length} machine${rows.length === 1 ? "" : "s"}`;
+}
+function prodRecalcRow(i) {
+  const row = prodRows()[i];
+  const cell = document.querySelector(`#prodTableBody [data-result="${i}"]`);
+  if (cell && row) cell.textContent = prodKg(prodProductionPerShift(row));
+  prodUpdateTotals();
+  prodUpdateReverseResults();
+}
+function prodReverseRow(selectId) {
+  const select = $(selectId);
+  const idx = select ? parseInt(select.value, 10) : 0;
+  return prodRows()[Number.isFinite(idx) ? idx : 0];
+}
+function renderProdReverse() {
+  const rows = prodRows();
+  ["#prodCounterMachine", "#prodProductionMachine"].forEach((id) => {
+    const select = $(id);
+    if (!select) return;
+    const prev = select.value;
+    select.innerHTML = rows.map((row, i) => `<option value="${i}">M/C ${prodEsc(row.machine ?? i + 1)}</option>`).join("");
+    select.value = prev && rows[+prev] ? prev : "0";
+  });
+  prodUpdateReverseResults();
+}
+function prodUpdateReverseResults() {
+  const kg = prodNum($("#prodTargetProduction")?.value);
+  const counter = prodNum($("#prodCounterInput")?.value);
+  const cRow = prodReverseRow("#prodCounterMachine");
+  const pRow = prodReverseRow("#prodProductionMachine");
+  const cResult = $("#prodCounterResult");
+  if (cResult && cRow) {
+    const v = prodCounterFromProduction(cRow, Number.isFinite(kg) ? kg : prodCalc.targetProduction);
+    cResult.textContent = Number.isFinite(v) ? `${prodFmt(v, 0)} rev` : "—";
+  }
+  const pResult = $("#prodProductionResult");
+  if (pResult && pRow) {
+    const v = prodProductionFromCounter(pRow, Number.isFinite(counter) ? counter : prodCalc.counterInput);
+    pResult.textContent = Number.isFinite(v) ? `${prodFmt(v)} kg` : "—";
+  }
+}
+function prodAddFabric(name) {
+  const clean = String(name || "").trim();
+  if (!clean) { showNotice("Enter a fabric name to add it.", "warning"); return; }
+  if (prodAvailableFabrics().includes(clean)) {
+    prodCalc.fabric = clean;
+    saveProdCalc();
+    renderProductionCalculation();
+    return;
+  }
+  prodCalc.addedFabrics.push(clean);
+  prodCalc.rows[clean] = [{ ...PROD_SAMPLE_ROW }];
+  prodCalc.fabric = clean;
+  saveProdCalc();
+  renderProductionCalculation();
+  showNotice(`${clean} production calculation added.`, "success");
+}
+
 function renderDiaWiseSummary() {
   const source = state.snapshot.diaWiseSummary || [];
   const term = normalizedSearchText($("#diaSummarySearch")?.value || "");
@@ -1410,7 +1611,7 @@ function changeView(view) {
     const previousLabel = {
       dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File",
       routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", finishType: "Finish Type Short Name",
-      summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", department: state.department || "Department Workspace",
+      summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", department: state.department || "Department Workspace",
       administration: "Administration", settings: "Settings",
     }[previousView] || previousView;
     if (previousView && window.erp && typeof window.erp.recordUsage === "function") {
@@ -1440,6 +1641,7 @@ function changeView(view) {
         finishType: "Finish Type Short Name",
         summary: state.departments[0] || "Circular Knitting",
         diaWiseSummary: "Dia Wise Summary",
+        productionCalculation: "Production Calculation",
         department: state.department || "Department Workspace",
         administration: "Administration",
         settings: "Settings",
@@ -1460,6 +1662,7 @@ function changeView(view) {
       renderSummary();
     }
     if (view === "diaWiseSummary") renderDiaWiseSummary();
+    if (view === "productionCalculation") renderProductionCalculation();
     if (view === "finishType") renderFinishType();
     if (view === "routingUploadFormat") refreshRoutingState();
     if (view === "zkngMaterialUpload") refreshZkngState();
@@ -2058,7 +2261,7 @@ function renderAccess() {
   const isFullAdmin = isMainAdmin || state.access.role === "admin";
   const isAuthorizedUploadRole = ["power_user", "master_user", "department_head", "admin", "main_admin"].includes(state.access.role) || (state.access.permissions || []).includes("upload");
   const canUpload = isAuthorizedUploadRole;
-  const allowedFiles = Array.isArray(state.access.filePermissions) ? state.access.filePermissions : ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "department"];
+  const allowedFiles = Array.isArray(state.access.filePermissions) ? state.access.filePermissions : ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "department"];
 
   $$(".admin-upload-btn, [data-admin-upload]").forEach((button) => {
     button.classList.toggle("hidden", !isAuthorizedUploadRole);
@@ -2126,7 +2329,7 @@ function renderAccess() {
   $("#zkngMaterialUploadNav")?.classList.remove("hidden");
   $("#lsmwBomUploadNav")?.classList.remove("hidden");
   $("#characteristicsUploadNav")?.classList.remove("hidden");
-  $("#primarySummaryNav")?.classList.toggle("hidden", !["summary", "diaWiseSummary"].some((id) => allowedFiles.includes(id)));
+  $("#primarySummaryNav")?.classList.toggle("hidden", !["summary", "diaWiseSummary", "productionCalculation"].some((id) => allowedFiles.includes(id)));
   $$('[data-view="department"]').forEach((button) => button.classList.toggle("hidden", !allowedFiles.includes("department")));
   renderSubAdmins();
   renderDepartmentFiles();
@@ -2681,6 +2884,42 @@ document.addEventListener("click", async (event) => {
 });
 $("#materialSearch")?.addEventListener("input", debounce(() => refreshFilteredTable("materials")));
 $("#diaSummarySearch")?.addEventListener("input", debounce(renderDiaWiseSummary, 120));
+// Production Calculation listeners
+$("#prodFabricSelect")?.addEventListener("change", (event) => { prodCalc.fabric = event.target.value; saveProdCalc(); renderProductionCalculation(); });
+$("#prodShiftHours")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodShiftHours").value); if (Number.isFinite(v) && v > 0) { prodCalc.shiftHours = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
+$("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodEfficiency").value); if (Number.isFinite(v) && v > 0 && v <= 100) { prodCalc.efficiency = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
+$("#prodAddFabricToggle")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.toggle("hidden"); $("#prodNewFabricName")?.focus(); });
+$("#prodAddFabricBtn")?.addEventListener("click", () => prodAddFabric($("#prodNewFabricName")?.value));
+$("#prodNewFabricName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") prodAddFabric(event.target.value); });
+$$("#prodAddFabricPanel [data-add-fabric]").forEach((btn) => btn.addEventListener("click", () => prodAddFabric(btn.dataset.addFabric)));
+$("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); renderProdReverse(); });
+$("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric] = [{ ...PROD_SAMPLE_ROW }]; saveProdCalc(); renderProdTable(); renderProdReverse(); });
+$("#prodTableBody")?.addEventListener("input", (event) => {
+  const input = event.target.closest("input[data-field]");
+  if (!input) return;
+  const tr = input.closest("tr[data-row]");
+  const row = prodRows()[Number(tr?.dataset.row)];
+  if (!row) return;
+  row[input.dataset.field] = input.value;
+  saveProdCalc();
+  prodRecalcRow(Number(tr.dataset.row));
+  if (input.dataset.field === "machine") renderProdReverse();
+});
+$("#prodTableBody")?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".prod-remove-row");
+  if (!btn) return;
+  const rows = prodRows();
+  if (rows.length <= 1) { showNotice("At least one machine row is needed.", "warning"); return; }
+  rows.splice(Number(btn.dataset.row), 1);
+  saveProdCalc();
+  renderProdTable();
+  renderProdReverse();
+});
+$("#prodCounterMachine")?.addEventListener("change", prodUpdateReverseResults);
+$("#prodProductionMachine")?.addEventListener("change", prodUpdateReverseResults);
+$("#prodTargetProduction")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodTargetProduction").value); if (Number.isFinite(v)) { prodCalc.targetProduction = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
+$("#prodCounterInput")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodCounterInput").value); if (Number.isFinite(v)) { prodCalc.counterInput = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
+
 $$("[data-material-column]").forEach((input) =>
   input.addEventListener("input", debounce(() => refreshFilteredTable("materials"))),
 );
@@ -3164,7 +3403,7 @@ async function performLogoutAndSwitchUser() {
     designation: "",
     departments: [],
     permissions: ["view"],
-    filePermissions: ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "department"],
+    filePermissions: ["materials", "codeRequirement", "finishType", "routingUploadFormat", "zkngMaterialUpload", "lsmwBomUpload", "characteristicsUpload", "summary", "diaWiseSummary", "productionCalculation", "department"],
   };
   state.profileImageDataUrl = "";
   state.logoutCompletedAt = Date.now();
@@ -3472,7 +3711,7 @@ $$(".export").forEach((button) => button.addEventListener("click", () => exportC
 initialize().catch((error) => showNotice(`Software could not start: ${error.message}`, "warning"));
 window.setInterval(async () => {
   const seconds = Math.max(1, Math.round((Date.now() - (state.viewStartedAt || Date.now())) / 1000));
-  const currentLabel = { dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File", routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", zkngMaterialUpload: "ZKNG Material Upload File", lsmwBomUpload: "LSMW BOM Upload File", finishType: "Finish Type Short Name", summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", department: state.department || "Department Workspace", administration: "Administration", settings: "Settings" }[state.view] || state.view;
+  const currentLabel = { dashboard: "Overview", materials: "Fabric Material Code", codeRequirement: "Code Requirement File", routingUploadFormat: "Routing Upload File", characteristicsUpload: "Characteristics Upload File", zkngMaterialUpload: "ZKNG Material Upload File", lsmwBomUpload: "LSMW BOM Upload File", finishType: "Finish Type Short Name", summary: "Circular Knitting", diaWiseSummary: "Dia Wise Summary", productionCalculation: "Production Calculation", department: state.department || "Department Workspace", administration: "Administration", settings: "Settings" }[state.view] || state.view;
   window.erp.recordUsage({ module: currentLabel, seconds, count: false, file: state.departmentStatuses?.[state.department]?.file || "" }).catch(() => {});
   state.viewStartedAt = Date.now();
   const result = await window.erp.accountHeartbeat();
