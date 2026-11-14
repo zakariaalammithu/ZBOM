@@ -34,7 +34,7 @@
         <div class="submodule-group" id="summarySubmodules">
           <button class="submodule-nav" data-view="diaWiseSummary"><i>└</i> Dia Wise Summary</button>
           <button class="submodule-nav" data-view="productionCalculation"><i>└</i> Production Calculation</button>
-          <button class="submodule-nav" data-view="fleeceCalculation"><i>└</i> Fleece Fabric Calculation</button>
+          <button class="submodule-nav" data-view="fleeceCalculation"><i>└</i> Yarn Calculation</button>
         </div>
         <div class="department-nav" id="departmentNav"></div>
         <small class="nav-group">MANAGEMENT</small>
@@ -337,17 +337,21 @@
 
       <section class="view" id="fleeceCalculation">
         <div class="dia-summary-heading">
-          <div><span>CIRCULAR KNITTING</span><h2>Fleece Fabric Calculation</h2><p>Yarn percentage share for fleece — enter Yarn Count and Stitch Length only; the rest is calculated automatically.</p></div>
+          <div><span>CIRCULAR KNITTING</span><h2>Yarn Calculation</h2><p>Yarn percentage share for circular knitting fabrics — enter Yarn Count and Stitch Length only; the rest is calculated automatically.</p></div>
         </div>
         <div class="panel prod-calc-panel">
-          <div class="panel-title"><div><h3>Fleece Type</h3><p>Select a fleece type to calculate its yarn percentage. Only Yarn Count and Stitch Length need to be entered.</p></div></div>
+          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its yarn percentage. Fleece, Two Thread Fleece and Three Thread Fleece are ready now — add any other circular knitting fabric below.</p></div></div>
           <div class="prod-calc-filter-row">
-            <label>Fleece Type<select id="fleeceTypeSelect">
-              <option value="threeNoFilament">Fleece</option>
-              <option value="twoThread">Two Thread Fleece</option>
-              <option value="threeFilament">Three Thread Fleece</option>
-            </select></label>
+            <label>Fabric<select id="fleeceTypeSelect"></select></label>
+            <button class="secondary" id="fleeceAddFabricToggle" type="button">+ Add Fabric</button>
           </div>
+          <div class="prod-calc-add hidden" id="fleeceAddFabricPanel">
+            <input id="fleeceNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
+            <button class="primary" id="fleeceAddFabricBtn" type="button">Add Fabric Calculation</button>
+            <span class="prod-quick-add">Quick add: <button type="button" data-add-fabric="Single Jersey">Single Jersey</button><button type="button" data-add-fabric="Pique">Pique</button><button type="button" data-add-fabric="Rib">Rib</button><button type="button" data-add-fabric="Interlock">Interlock</button></span>
+            <small>Added fabrics use the same yarn share formula — Stitch Length ÷ Yarn Count — with their own yarn rows (up to 8 yarns).</small>
+          </div>
+          <div class="prod-calc-notice hidden" id="fleeceFabricNotice"></div>
         </div>
         <div class="panel fleece-panel" id="fleecePanelThreeNoFilament">
           <div class="panel-title"><div><h3>Three-Thread Fleece — Filament Not Used</h3><p>Face Loop + Binder + Back Loop. The Binder count follows the Face Loop count automatically, as in the sheet.</p></div></div>
@@ -371,6 +375,15 @@
               <div class="fleece-result"><small>Share</small><strong id="fl1BackPct">—</strong></div>
             </div>
           </div>
+          <div class="fleece-summary">
+            <h4>Yarn Calculation</h4>
+            <table class="fleece-summary-table">
+              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
+              <tbody id="fl1SummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="fl1SummaryTotal">100</td></tr></tfoot>
+            </table>
+            <div class="fleece-summary-actions"><button class="secondary" id="fl1CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl1CopyNote"></span></div>
+          </div>
         </div>
         <div class="panel fleece-panel" id="fleecePanelTwoThread">
           <div class="panel-title"><div><h3>Two-Thread Fleece</h3><p>Face Loop + Back Loop.</p></div></div>
@@ -387,6 +400,15 @@
               <label>Stitch Length (mm)<input id="fl2BackSl" type="number" min="0" step="any" value="2"></label>
               <div class="fleece-result"><small>Share</small><strong id="fl2BackPct">—</strong></div>
             </div>
+          </div>
+          <div class="fleece-summary">
+            <h4>Yarn Calculation</h4>
+            <table class="fleece-summary-table">
+              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
+              <tbody id="fl2SummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="fl2SummaryTotal">100</td></tr></tfoot>
+            </table>
+            <div class="fleece-summary-actions"><button class="secondary" id="fl2CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl2CopyNote"></span></div>
           </div>
         </div>
         <div class="panel fleece-panel" id="fleecePanelThreeFilament">
@@ -412,7 +434,39 @@
             </div>
           </div>
         </div>
-        <p class="prod-formula">Share % = (Stitch Length ÷ Yarn Count) ÷ Σ (Stitch Length ÷ Yarn Count) × 100 &nbsp;·&nbsp; For filament, (Stitch Length × Denier ÷ 5315) is used in place of (Stitch Length ÷ Yarn Count). The three shares always add up to 100%.</p>
+          <div class="fleece-summary">
+            <h4>Yarn Calculation</h4>
+            <table class="fleece-summary-table">
+              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
+              <tbody id="fl3SummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="fl3SummaryTotal">100</td></tr></tfoot>
+            </table>
+            <div class="fleece-summary-actions"><button class="secondary" id="fl3CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl3CopyNote"></span></div>
+          </div>
+        </div>
+        <div class="panel fleece-panel hidden" id="fleecePanelCustom">
+          <div class="panel-title"><div><h3 id="fleeceCustomTitle">—</h3><p>Yarn percentage share — enter Yarn Count and Stitch Length for each yarn (up to 8 yarns).</p></div></div>
+          <div class="table-card">
+            <div class="table-scroll"><table class="fleece-custom-table">
+              <thead><tr><th>SL no</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Share %</th><th></th></tr></thead>
+              <tbody id="fleeceCustomBody"></tbody>
+            </table></div>
+          </div>
+          <div class="fleece-custom-actions">
+            <button class="secondary" id="fleeceAddYarn" type="button">+ Add Yarn</button>
+            <span class="prod-total">Total: <b id="fleeceCustomTotal">100</b></span>
+          </div>
+          <div class="fleece-summary">
+            <h4>Yarn Calculation</h4>
+            <table class="fleece-summary-table">
+              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
+              <tbody id="flCustomSummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="flCustomSummaryTotal">100</td></tr></tfoot>
+            </table>
+            <div class="fleece-summary-actions"><button class="secondary" id="flCustomCopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="flCustomCopyNote"></span></div>
+          </div>
+        </div>
+        <p class="prod-formula">Share % = (Stitch Length ÷ Yarn Count) ÷ Σ (Stitch Length ÷ Yarn Count) × 100 &nbsp;·&nbsp; For filament, (Stitch Length × Denier ÷ 5315) is used in place of (Stitch Length ÷ Yarn Count). The shares always add up to 100%.</p>
       </section>
 
       <section class="view" id="department">
@@ -499,7 +553,7 @@
               <label>Role<select id="subAdminRole"><option value="guest">Guest User</option><option value="standard_user">Standard User</option><option value="power_user">Power User</option><option value="master_user">Master User</option><option value="department_head">Department Head</option><option value="admin">Admin</option></select></label>
               <label>Department<select id="subAdminDepartment"></select></label>
               <label>Initial password<div class="password-input"><input type="password" id="subAdminPassword" placeholder="Minimum 6 characters"><button type="button" class="toggle-password" data-password-target="subAdminPassword" title="Show password" aria-label="Show password">◉</button></div></label>
-              <fieldset class="file-permission-field"><legend>File &amp; Module Permission</legend><div id="subAdminFilePermissions"><label><input type="checkbox" value="materials" checked> Fabric Material Code</label><label><input type="checkbox" value="codeRequirement" checked> Code Requirement</label><label><input type="checkbox" value="finishType" checked> Finish Type</label><label><input type="checkbox" value="zkngMaterialUpload" checked> ZKNG Material Upload File</label><label><input type="checkbox" value="lsmwBomUpload" checked> LSMW BOM Upload File</label><label><input type="checkbox" value="routingUploadFormat" checked> Routing Upload File</label><label><input type="checkbox" value="characteristicsUpload" checked> Characteristics Upload File</label><label><input type="checkbox" value="summary" checked> Circular Knitting</label><label><input type="checkbox" value="diaWiseSummary" checked> Dia Wise Summary</label><label><input type="checkbox" value="productionCalculation" checked> Production Calculation</label><label><input type="checkbox" value="fleeceCalculation" checked> Fleece Fabric Calculation</label><label><input type="checkbox" value="department" checked> Department Files</label></div></fieldset>
+              <fieldset class="file-permission-field"><legend>File &amp; Module Permission</legend><div id="subAdminFilePermissions"><label><input type="checkbox" value="materials" checked> Fabric Material Code</label><label><input type="checkbox" value="codeRequirement" checked> Code Requirement</label><label><input type="checkbox" value="finishType" checked> Finish Type</label><label><input type="checkbox" value="zkngMaterialUpload" checked> ZKNG Material Upload File</label><label><input type="checkbox" value="lsmwBomUpload" checked> LSMW BOM Upload File</label><label><input type="checkbox" value="routingUploadFormat" checked> Routing Upload File</label><label><input type="checkbox" value="characteristicsUpload" checked> Characteristics Upload File</label><label><input type="checkbox" value="summary" checked> Circular Knitting</label><label><input type="checkbox" value="diaWiseSummary" checked> Dia Wise Summary</label><label><input type="checkbox" value="productionCalculation" checked> Production Calculation</label><label><input type="checkbox" value="fleeceCalculation" checked> Yarn Calculation</label><label><input type="checkbox" value="department" checked> Department Files</label></div></fieldset>
               <button type="button" class="primary" id="saveSubAdmin">Add / Update Account</button>
             </div>
             <div class="subadmin-list" id="subAdminList"></div>

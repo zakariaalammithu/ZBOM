@@ -1062,7 +1062,7 @@ function prodAddFabric(name) {
 }
 
 
-// ---- Fleece Fabric Calculation (Circular Knitting) ----
+// ---- Yarn Calculation (Circular Knitting) ----
 // Formulae from the user's FLEECE_YARN___CALCULATION.xlsx (sheet "Fleece").
 // Each yarn's share of the total yarn weight is (Stitch Length / Yarn Count)
 // divided by the sum of (Stitch Length / Yarn Count) over all yarns, x 100.
@@ -1075,6 +1075,16 @@ function prodAddFabric(name) {
 // Only Yarn Count and Stitch Length are inputs (the yellow cells in the sheet);
 // every percentage is calculated automatically.
 const FLEECE_STORAGE_KEY = "zbom-fleece-calculation-v1";
+const FLEECE_BUILTIN_TYPES = [
+  { value: "threeNoFilament", label: "Fleece" },
+  { value: "twoThread", label: "Two Thread Fleece" },
+  { value: "threeFilament", label: "Three Thread Fleece" },
+];
+const FLEECE_SUGGESTED_FABRICS = ["Single Jersey", "Pique", "Rib", "Interlock"];
+const FLEECE_MAX_YARNS = 8;
+// Sample yarns for a newly added fabric (a real three-yarn case).
+const FLEECE_SAMPLE_YARNS = [{ count: 30, sl: 3.9 }, { count: 30, sl: 3.85 }, { count: 10, sl: 1.95 }];
+
 let fleeceCalc = loadFleeceCalc();
 
 function fleeceDefaultState() {
@@ -1083,6 +1093,8 @@ function fleeceDefaultState() {
     threeNoFilament: { faceCount: 28, faceSl: 4.9, binderSl: 3.85, backCount: 5, backSl: 1.95 },
     twoThread: { faceCount: 8, faceSl: 5, backCount: 10, backSl: 2 },
     threeFilament: { faceCount: 24, faceSl: 4.4, filamentDenier: 75, filamentSl: 2.75, backCount: 10, backSl: 1.6 },
+    addedFabrics: [],
+    yarns: {},
   };
 }
 function loadFleeceCalc() {
@@ -1091,12 +1103,19 @@ function loadFleeceCalc() {
     if (!raw) return fleeceDefaultState();
     const parsed = JSON.parse(raw);
     const base = fleeceDefaultState();
-    return {
-      type: ["threeNoFilament", "twoThread", "threeFilament"].includes(parsed.type) ? parsed.type : base.type,
+    const merged = {
+      type: parsed.type || base.type,
       threeNoFilament: { ...base.threeNoFilament, ...(parsed.threeNoFilament || {}) },
       twoThread: { ...base.twoThread, ...(parsed.twoThread || {}) },
       threeFilament: { ...base.threeFilament, ...(parsed.threeFilament || {}) },
+      addedFabrics: (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !FLEECE_BUILTIN_TYPES.some((t) => t.value === name)),
+      yarns: { ...(parsed.yarns || {}) },
     };
+    merged.addedFabrics.forEach((name) => {
+      if (!Array.isArray(merged.yarns[name]) || !merged.yarns[name].length) merged.yarns[name] = FLEECE_SAMPLE_YARNS.map((y) => ({ ...y }));
+    });
+    if (![...FLEECE_BUILTIN_TYPES.map((t) => t.value), ...merged.addedFabrics].includes(merged.type)) merged.type = base.type;
+    return merged;
   } catch (e) {
     return fleeceDefaultState();
   }
@@ -1116,12 +1135,198 @@ function fleeceSetText(id, text) {
   const el = $(id);
   if (el) el.textContent = text;
 }
+function fleeceEsc(value) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function fleeceAvailableTypes() { return [...FLEECE_BUILTIN_TYPES.map((t) => t.value), ...fleeceCalc.addedFabrics]; }
+function fleeceTypeLabel(value) {
+  const builtin = FLEECE_BUILTIN_TYPES.find((t) => t.value === value);
+  return builtin ? builtin.label : value;
+}
+function fleeceFillTypeSelect() {
+  const select = $("#fleeceTypeSelect");
+  if (!select) return;
+  const available = fleeceAvailableTypes();
+  const pending = FLEECE_SUGGESTED_FABRICS.filter((name) => !available.includes(name));
+  let html = `<optgroup label="Ready">` + available.map((name) => `<option value="${fleeceEsc(name)}">${fleeceEsc(fleeceTypeLabel(name))}</option>`).join("") + `</optgroup>`;
+  if (pending.length) html += `<optgroup label="Not added yet">` + pending.map((name) => `<option value="${fleeceEsc(name)}">${fleeceEsc(name)} — not added yet</option>`).join("") + `</optgroup>`;
+  select.innerHTML = html;
+  select.value = fleeceCalc.type;
+  if (select.value !== fleeceCalc.type) select.value = available[0];
+}
+function fleeceNeLabel(count) {
+  const x = parseFloat(count);
+  return Number.isFinite(x) ? `${x}/1` : "—";
+}
+function fleeceDenierLabel(denier) {
+  const x = parseFloat(denier);
+  return Number.isFinite(x) ? `${x}D` : "—";
+}
+function fleecePctNum(value) {
+  return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+}
+// One row per yarn: { label, pct }. The same shape feeds the summary table
+// and the Copy-table TSV, so what you see is exactly what gets pasted.
+function fleecePanelRows(panel) {
+  const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : NaN; };
+  const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
+  if (panel === "fl1") {
+    const [f, b, k] = fleeceShare([n(s1.faceSl) / n(s1.faceCount), n(s1.binderSl) / n(s1.faceCount), n(s1.backSl) / n(s1.backCount)]);
+    return [
+      { label: fleeceNeLabel(s1.faceCount), pct: f },
+      { label: fleeceNeLabel(s1.faceCount), pct: b },
+      { label: fleeceNeLabel(s1.backCount), pct: k },
+    ];
+  }
+  if (panel === "fl2") {
+    const [f, k] = fleeceShare([n(s2.faceSl) / n(s2.faceCount), n(s2.backSl) / n(s2.backCount)]);
+    return [
+      { label: fleeceNeLabel(s2.faceCount), pct: f },
+      { label: fleeceNeLabel(s2.backCount), pct: k },
+    ];
+  }
+  if (panel === "fl3") {
+    const [f, b, k] = fleeceShare([n(s3.faceSl) / n(s3.faceCount), (n(s3.filamentSl) * n(s3.filamentDenier)) / 5315, n(s3.backSl) / n(s3.backCount)]);
+    return [
+      { label: fleeceNeLabel(s3.faceCount), pct: f },
+      { label: fleeceDenierLabel(s3.filamentDenier), pct: b },
+      { label: fleeceNeLabel(s3.backCount), pct: k },
+    ];
+  }
+  const yarns = fleeceCustomYarns();
+  const shares = fleeceShare(yarns.map((y) => n(y.sl) / n(y.count)));
+  return yarns.map((y, i) => ({ label: fleeceNeLabel(y.count), pct: shares[i] }));
+}
+function fleeceRenderSummary(prefix, rows) {
+  const body = $(`#${prefix}SummaryBody`);
+  if (body) {
+    body.innerHTML = rows.map((row, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(row.label)}</td><td>${fleecePctNum(row.pct)}</td></tr>`).join("");
+  }
+  const totalEl = $(`#${prefix}SummaryTotal`);
+  if (totalEl) {
+    const allFinite = rows.length > 0 && rows.every((row) => Number.isFinite(row.pct));
+    totalEl.textContent = allFinite ? String(Number(rows.reduce((s, row) => s + row.pct, 0).toFixed(2))) : "—";
+  }
+}
+function fleeceCopyTable(prefix) {
+  const rows = fleecePanelRows(prefix === "flCustom" ? "custom" : prefix);
+  const allFinite = rows.length > 0 && rows.every((row) => Number.isFinite(row.pct));
+  const total = allFinite ? String(Number(rows.reduce((s, row) => s + row.pct, 0).toFixed(2))) : "—";
+  const lines = ["SL no\tYarn count\tYarn %"];
+  rows.forEach((row, i) => lines.push(`${i + 1}\t${row.label}\t${fleecePctNum(row.pct)}`));
+  lines.push(`\tTotal\t${total}`);
+  const text = lines.join("\n");
+  const note = $(`#${prefix}CopyNote`);
+  const done = () => { if (note) { note.textContent = "Copied — paste into Excel or SAP."; setTimeout(() => { note.textContent = ""; }, 3000); } };
+  const fail = () => { if (note) note.textContent = "Copy did not work — select the table and press Ctrl+C."; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => fleeceCopyFallback(text, done, fail));
+  } else {
+    fleeceCopyFallback(text, done, fail);
+  }
+}
+function fleeceCopyFallback(text, done, fail) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) done(); else fail();
+  } catch (e) { fail(); }
+}
+function fleeceCustomYarns() {
+  const name = fleeceCalc.type;
+  if (!name || FLEECE_BUILTIN_TYPES.some((t) => t.value === name)) return [];
+  return Array.isArray(fleeceCalc.yarns[name]) ? fleeceCalc.yarns[name] : [];
+}
+function renderFleeceCustom() {
+  const panel = $("#fleecePanelCustom");
+  if (!panel) return;
+  const title = $("#fleeceCustomTitle");
+  if (title) title.textContent = `${fleeceCalc.type} — Yarn Calculation`;
+  const body = $("#fleeceCustomBody");
+  const yarns = fleeceCustomYarns();
+  if (body) {
+    body.innerHTML = yarns.map((y, i) => `
+    <tr data-yarn="${i}">
+      <td>${i + 1}</td>
+      <td><input data-field="count" type="number" min="0" step="any" value="${fleeceEsc(y.count ?? "")}"></td>
+      <td><input data-field="sl" type="number" min="0" step="any" value="${fleeceEsc(y.sl ?? "")}"></td>
+      <td class="fleece-custom-share" data-share="${i}">—</td>
+      <td><button type="button" class="secondary fleece-remove-yarn" data-remove-yarn="${i}" title="Remove yarn" ${yarns.length <= 1 ? "disabled" : ""}>✕</button></td>
+    </tr>`).join("");
+  }
+  const addBtn = $("#fleeceAddYarn");
+  if (addBtn) addBtn.disabled = yarns.length >= FLEECE_MAX_YARNS;
+  fleeceRecalcCustom();
+}
+// Updates only the share cells / totals / summary table — never rebuilds the
+// inputs, so typing in a yarn row never loses focus.
+function fleeceRecalcCustom() {
+  const yarns = fleeceCustomYarns();
+  const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : NaN; };
+  const shares = fleeceShare(yarns.map((y) => n(y.sl) / n(y.count)));
+  yarns.forEach((y, i) => {
+    const cell = document.querySelector(`#fleeceCustomBody [data-share="${i}"]`);
+    if (cell) cell.textContent = fleecePct(shares[i]);
+  });
+  const totalEl = $("#fleeceCustomTotal");
+  if (totalEl) {
+    const allFinite = yarns.length > 0 && shares.every((v) => Number.isFinite(v));
+    totalEl.textContent = allFinite ? String(Number(shares.reduce((s, v) => s + v, 0).toFixed(2))) : "—";
+  }
+  fleeceRenderSummary("flCustom", fleecePanelRows("custom"));
+}
+function fleeceAddFabric(name) {
+  const clean = String(name || "").trim();
+  if (!clean) { showNotice("Enter a fabric name to add it.", "warning"); return; }
+  if (fleeceAvailableTypes().includes(clean)) {
+    fleeceCalc.type = clean;
+    saveFleeceCalc();
+    renderFleeceCalculation();
+    return;
+  }
+  fleeceCalc.addedFabrics.push(clean);
+  fleeceCalc.yarns[clean] = FLEECE_SAMPLE_YARNS.map((y) => ({ ...y }));
+  fleeceCalc.type = clean;
+  saveFleeceCalc();
+  renderFleeceCalculation();
+  showNotice(`${clean} yarn calculation added.`, "success");
+}
+function fleeceAddYarn() {
+  const yarns = fleeceCustomYarns();
+  if (yarns.length >= FLEECE_MAX_YARNS) return;
+  yarns.push({ count: "", sl: "" });
+  saveFleeceCalc();
+  renderFleeceCustom();
+}
+function fleeceRemoveYarn(index) {
+  const yarns = fleeceCustomYarns();
+  if (yarns.length <= 1) return;
+  yarns.splice(index, 1);
+  saveFleeceCalc();
+  renderFleeceCustom();
+}
+
 function renderFleeceCalculation() {
-  const typeSelect = $("#fleeceTypeSelect");
-  if (typeSelect) typeSelect.value = fleeceCalc.type || "threeNoFilament";
+  fleeceFillTypeSelect();
+  const ready = fleeceAvailableTypes().includes(fleeceCalc.type);
+  const isCustom = ready && !FLEECE_BUILTIN_TYPES.some((t) => t.value === fleeceCalc.type);
   $("#fleecePanelThreeNoFilament")?.classList.toggle("hidden", fleeceCalc.type !== "threeNoFilament");
   $("#fleecePanelTwoThread")?.classList.toggle("hidden", fleeceCalc.type !== "twoThread");
   $("#fleecePanelThreeFilament")?.classList.toggle("hidden", fleeceCalc.type !== "threeFilament");
+  $("#fleecePanelCustom")?.classList.toggle("hidden", !isCustom);
+  const notice = $("#fleeceFabricNotice");
+  if (notice) {
+    notice.classList.toggle("hidden", ready);
+    if (!ready) {
+      notice.innerHTML = `Yarn calculation for <b>${fleeceEsc(fleeceCalc.type)}</b> is not added yet. <button type="button" class="secondary" id="fleeceAddThisFabric">Add ${fleeceEsc(fleeceCalc.type)} Calculation</button>`;
+      $("#fleeceAddThisFabric")?.addEventListener("click", () => fleeceAddFabric(fleeceCalc.type));
+    }
+  }
   const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
   const setVal = (id, value) => { const el = $(id); if (el) el.value = value ?? ""; };
   setVal("#fl1FaceCount", s1.faceCount);
@@ -1140,6 +1345,7 @@ function renderFleeceCalculation() {
   setVal("#fl3BackCount", s3.backCount);
   setVal("#fl3BackSl", s3.backSl);
   fleeceRecalcAll();
+  if (ready && isCustom) renderFleeceCustom();
 }
 function fleeceRecalcAll() {
   const s1 = fleeceCalc.threeNoFilament, s2 = fleeceCalc.twoThread, s3 = fleeceCalc.threeFilament;
@@ -1157,6 +1363,10 @@ function fleeceRecalcAll() {
   fleeceSetText("#fl3FacePct", fleecePct(f3));
   fleeceSetText("#fl3BinderPct", fleecePct(b3));
   fleeceSetText("#fl3BackPct", fleecePct(k3));
+  fleeceRenderSummary("fl1", fleecePanelRows("fl1"));
+  fleeceRenderSummary("fl2", fleecePanelRows("fl2"));
+  fleeceRenderSummary("fl3", fleecePanelRows("fl3"));
+  if (fleeceCalc.type && !FLEECE_BUILTIN_TYPES.some((t) => t.value === fleeceCalc.type)) fleeceRecalcCustom();
 }
 function setVal1BinderCount() {
   const el = $("#fl1BinderCount");
@@ -3050,6 +3260,33 @@ $("#fleeceCalculation")?.addEventListener("input", (event) => {
   saveFleeceCalc();
   fleeceRecalcAll();
 });
+$("#fleeceAddFabricToggle")?.addEventListener("click", () => $("#fleeceAddFabricPanel")?.classList.toggle("hidden"));
+$("#fleeceAddFabricBtn")?.addEventListener("click", () => { fleeceAddFabric($("#fleeceNewFabricName")?.value); const input = $("#fleeceNewFabricName"); if (input) input.value = ""; });
+$$("#fleeceAddFabricPanel [data-add-fabric]").forEach((btn) => btn.addEventListener("click", () => fleeceAddFabric(btn.dataset.addFabric)));
+$("#fl1CopyBtn")?.addEventListener("click", () => fleeceCopyTable("fl1"));
+$("#fl2CopyBtn")?.addEventListener("click", () => fleeceCopyTable("fl2"));
+$("#fl3CopyBtn")?.addEventListener("click", () => fleeceCopyTable("fl3"));
+$("#flCustomCopyBtn")?.addEventListener("click", () => fleeceCopyTable("flCustom"));
+$("#fleeceAddYarn")?.addEventListener("click", fleeceAddYarn);
+$("#fleeceCustomBody")?.addEventListener("input", (event) => {
+  const input = event.target.closest("input");
+  if (!input) return;
+  const row = event.target.closest("tr[data-yarn]");
+  if (!row) return;
+  const yarns = fleeceCustomYarns();
+  const yarn = yarns[parseInt(row.dataset.yarn, 10)];
+  if (!yarn) return;
+  const value = parseFloat(input.value);
+  yarn[input.dataset.field] = Number.isFinite(value) ? value : "";
+  saveFleeceCalc();
+  fleeceRecalcCustom();
+});
+$("#fleeceCustomBody")?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-remove-yarn]");
+  if (!btn) return;
+  fleeceRemoveYarn(parseInt(btn.dataset.removeYarn, 10));
+});
+
 
 
 $$("[data-material-column]").forEach((input) =>
