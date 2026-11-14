@@ -723,8 +723,18 @@ async function registerUserAccount(record) {
   registry.subAdmins ||= [];
   registry.subAdmins.push(account);
   registry.version = Date.now();
-  await writeJsonAtomic(accessFile(config.sharePath), registry);
-  await writeJsonAtomic(userFile("access-cache.json"), registry);
+  try {
+    await writeJsonAtomic(accessFile(config.sharePath), registry);
+    await writeJsonAtomic(userFile("access-cache.json"), registry);
+  } catch (error) {
+    // The account lives on the LAN share: the ZBOM-Admin folder must be
+    // created there first. A raw mkdir error (UNKNOWN/EPERM) only confuses,
+    // so say plainly what is blocked and what to check.
+    return {
+      ok: false,
+      message: `Could not save the account: the ZBOM-Admin folder could not be created on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`,
+    };
+  }
   return {
     ok: true,
     username: employeeId,
