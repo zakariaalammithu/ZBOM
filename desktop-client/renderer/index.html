@@ -337,10 +337,10 @@
 
       <section class="view" id="fleeceCalculation">
         <div class="dia-summary-heading">
-          <div><span>CIRCULAR KNITTING</span><h2>Yarn Calculation</h2><p>Yarn percentage share for circular knitting fabrics — enter Yarn Count and Stitch Length only; the rest is calculated automatically.</p></div>
+          <div><span>CIRCULAR KNITTING</span><h2>Yarn Calculation</h2><p>Yarn consumption for fleece and other circular knitting fabrics — enter Yarn Count, composition, Feeder and Stitch Length; Ratio, Consuming % and yarn quantities are calculated automatically.</p></div>
         </div>
         <div class="panel prod-calc-panel">
-          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its yarn percentage. Fleece, Two Thread Fleece and Three Thread Fleece are ready now — add any other circular knitting fabric below.</p></div></div>
+          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its yarn consumption. The four fleece types are ready now — add any other circular knitting fabric below.</p></div></div>
           <div class="prod-calc-filter-row">
             <label>Fabric<select id="fleeceTypeSelect"></select></label>
             <button class="secondary" id="fleeceAddFabricToggle" type="button">+ Add Fabric</button>
@@ -349,124 +349,38 @@
             <input id="fleeceNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
             <button class="primary" id="fleeceAddFabricBtn" type="button">Add Fabric Calculation</button>
             <span class="prod-quick-add">Quick add: <button type="button" data-add-fabric="Single Jersey">Single Jersey</button><button type="button" data-add-fabric="Pique">Pique</button><button type="button" data-add-fabric="Rib">Rib</button><button type="button" data-add-fabric="Interlock">Interlock</button></span>
-            <small>Added fabrics use the same yarn share formula — Stitch Length ÷ Yarn Count — with their own yarn rows (up to 8 yarns).</small>
+            <small>Added fabrics use the same yarn share formula — Stitch Length × Feeder ÷ Yarn Count — with their own yarn rows (up to 8 yarns).</small>
           </div>
           <div class="prod-calc-notice hidden" id="fleeceFabricNotice"></div>
         </div>
-        <div class="panel fleece-panel" id="fleecePanelThreeNoFilament">
-          <div class="panel-title"><div><h3>Three-Thread Fleece — Filament Not Used</h3><p>Face Loop + Binder + Back Loop. The Binder count follows the Face Loop count automatically, as in the sheet.</p></div></div>
-          <div class="fleece-grid">
-            <div class="fleece-yarn">
-              <b>Face Loop</b>
-              <label>Yarn Count (Ne)<input id="fl1FaceCount" type="number" min="0" step="any" value="28"></label>
-              <label>Stitch Length (mm)<input id="fl1FaceSl" type="number" min="0" step="any" value="4.9"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl1FacePct">—</strong></div>
-            </div>
-            <div class="fleece-yarn">
-              <b>Binder</b>
-              <label>Yarn Count (Ne)<input id="fl1BinderCount" type="number" value="28" readonly title="Auto — same as Face Loop count"></label>
-              <label>Stitch Length (mm)<input id="fl1BinderSl" type="number" min="0" step="any" value="3.85"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl1BinderPct">—</strong></div>
-            </div>
-            <div class="fleece-yarn">
-              <b>Back Loop</b>
-              <label>Yarn Count (Ne)<input id="fl1BackCount" type="number" min="0" step="any" value="5"></label>
-              <label>Stitch Length (mm)<input id="fl1BackSl" type="number" min="0" step="any" value="1.95"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl1BackPct">—</strong></div>
-            </div>
-          </div>
-          <div class="fleece-summary">
-            <h4>Yarn Calculation</h4>
-            <table class="fleece-summary-table">
-              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
-              <tbody id="fl1SummaryBody"></tbody>
-              <tfoot><tr><td></td><td>Total</td><td id="fl1SummaryTotal">100</td></tr></tfoot>
-            </table>
-            <div class="fleece-summary-actions"><button class="secondary" id="fl1CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl1CopyNote"></span></div>
-          </div>
-        </div>
-        <div class="panel fleece-panel" id="fleecePanelTwoThread">
-          <div class="panel-title"><div><h3>Two-Thread Fleece</h3><p>Face Loop + Back Loop.</p></div></div>
-          <div class="fleece-grid two">
-            <div class="fleece-yarn">
-              <b>Face Loop</b>
-              <label>Yarn Count (Ne)<input id="fl2FaceCount" type="number" min="0" step="any" value="8"></label>
-              <label>Stitch Length (mm)<input id="fl2FaceSl" type="number" min="0" step="any" value="5"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl2FacePct">—</strong></div>
-            </div>
-            <div class="fleece-yarn">
-              <b>Back Loop</b>
-              <label>Yarn Count (Ne)<input id="fl2BackCount" type="number" min="0" step="any" value="10"></label>
-              <label>Stitch Length (mm)<input id="fl2BackSl" type="number" min="0" step="any" value="2"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl2BackPct">—</strong></div>
-            </div>
-          </div>
-          <div class="fleece-summary">
-            <h4>Yarn Calculation</h4>
-            <table class="fleece-summary-table">
-              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
-              <tbody id="fl2SummaryBody"></tbody>
-              <tfoot><tr><td></td><td>Total</td><td id="fl2SummaryTotal">100</td></tr></tfoot>
-            </table>
-            <div class="fleece-summary-actions"><button class="secondary" id="fl2CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl2CopyNote"></span></div>
-          </div>
-        </div>
-        <div class="panel fleece-panel" id="fleecePanelThreeFilament">
-          <div class="panel-title"><div><h3>Three-Thread Fleece — Filament Used</h3><p>Face Loop + Filament Binder + Back Loop.</p></div></div>
-          <div class="fleece-grid">
-            <div class="fleece-yarn">
-              <b>Face Loop</b>
-              <label>Yarn Count (Ne)<input id="fl3FaceCount" type="number" min="0" step="any" value="24"></label>
-              <label>Stitch Length (mm)<input id="fl3FaceSl" type="number" min="0" step="any" value="4.4"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl3FacePct">—</strong></div>
-            </div>
-            <div class="fleece-yarn">
-              <b>Binder — Filament</b>
-              <label>Filament (Denier)<input id="fl3FilamentDenier" type="number" min="0" step="any" value="75"></label>
-              <label>Stitch Length (mm)<input id="fl3FilamentSl" type="number" min="0" step="any" value="2.75"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl3BinderPct">—</strong></div>
-            </div>
-            <div class="fleece-yarn">
-              <b>Back Loop</b>
-              <label>Yarn Count (Ne)<input id="fl3BackCount" type="number" min="0" step="any" value="10"></label>
-              <label>Stitch Length (mm)<input id="fl3BackSl" type="number" min="0" step="any" value="1.6"></label>
-              <div class="fleece-result"><small>Share</small><strong id="fl3BackPct">—</strong></div>
-            </div>
-          </div>
-        </div>
-          <div class="fleece-summary">
-            <h4>Yarn Calculation</h4>
-            <table class="fleece-summary-table">
-              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
-              <tbody id="fl3SummaryBody"></tbody>
-              <tfoot><tr><td></td><td>Total</td><td id="fl3SummaryTotal">100</td></tr></tfoot>
-            </table>
-            <div class="fleece-summary-actions"><button class="secondary" id="fl3CopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fl3CopyNote"></span></div>
-          </div>
-        </div>
-        <div class="panel fleece-panel hidden" id="fleecePanelCustom">
-          <div class="panel-title"><div><h3 id="fleeceCustomTitle">—</h3><p>Yarn percentage share — enter Yarn Count and Stitch Length for each yarn (up to 8 yarns).</p></div></div>
+        <div class="panel fleece-panel" id="fleecePanelMain">
+          <div class="panel-title"><div><h3 id="fleeceMainTitle">2 Thread</h3><p id="fleeceMainSubtitle">Plain + Loop — cotton and polyester.</p></div></div>
           <div class="table-card">
-            <div class="table-scroll"><table class="fleece-custom-table">
-              <thead><tr><th>SL no</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Share %</th><th></th></tr></thead>
-              <tbody id="fleeceCustomBody"></tbody>
+            <div class="table-scroll"><table class="fleece-yarn-table">
+              <thead>
+                <tr><th colspan="2"></th><th></th><th colspan="3">Yarn Composition</th><th></th><th></th><th></th><th></th><th colspan="3">Individual Composition</th><th></th><th></th></tr>
+                <tr><th>Count Type</th><th>Yarn</th><th>Yarn Count</th><th>Cotton %</th><th>Poly %</th><th>Others %</th><th>Feeder</th><th>Stitch Length</th><th>Ratio</th><th>Consuming %</th><th>Cotton</th><th>Poly</th><th>Others</th><th>Yarn Qty</th><th></th></tr>
+              </thead>
+              <tbody id="fleeceMainBody"></tbody>
+              <tfoot><tr><td colspan="8">Total</td><td id="fleeceMainRatioTotal">—</td><td id="fleeceMainConsumingTotal">100</td><td id="fleeceMainCottonTotal">—</td><td id="fleeceMainPolyTotal">—</td><td id="fleeceMainOthersTotal">—</td><td id="fleeceMainQtyTotal">—</td><td></td></tr></tfoot>
             </table></div>
           </div>
           <div class="fleece-custom-actions">
             <button class="secondary" id="fleeceAddYarn" type="button">+ Add Yarn</button>
-            <span class="prod-total">Total: <b id="fleeceCustomTotal">100</b></span>
+            <label class="fleece-qty-label">Fabric Qty <input id="fleeceFabricQty" type="number" min="0" step="any" value="23"></label>
+            <span class="fleece-lycra hidden" id="fleeceLycraWrap">Lycra factor <input id="fleeceLycraFactor" type="number" min="0" step="any" value="60"> <small>Count = 7315 ÷ factor</small></span>
           </div>
           <div class="fleece-summary">
             <h4>Yarn Calculation</h4>
             <table class="fleece-summary-table">
               <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
-              <tbody id="flCustomSummaryBody"></tbody>
-              <tfoot><tr><td></td><td>Total</td><td id="flCustomSummaryTotal">100</td></tr></tfoot>
+              <tbody id="fleeceSummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="fleeceSummaryTotal">100</td></tr></tfoot>
             </table>
-            <div class="fleece-summary-actions"><button class="secondary" id="flCustomCopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="flCustomCopyNote"></span></div>
+            <div class="fleece-summary-actions"><button class="secondary" id="fleeceCopyBtn" type="button">Copy table</button><span class="fleece-copy-note" id="fleeceCopyNote"></span></div>
           </div>
         </div>
-        <p class="prod-formula">Share % = (Stitch Length ÷ Yarn Count) ÷ Σ (Stitch Length ÷ Yarn Count) × 100 &nbsp;·&nbsp; For filament, (Stitch Length × Denier ÷ 5315) is used in place of (Stitch Length ÷ Yarn Count). The shares always add up to 100%.</p>
+        <p class="prod-formula">Ratio = Stitch Length × Feeder ÷ Yarn Count &nbsp;·&nbsp; For denier yarns, Ratio = Denier × Feeder × Stitch Length ÷ 5315 &nbsp;·&nbsp; For Lycra, Yarn Count = 7315 ÷ factor &nbsp;·&nbsp; Consuming % = Ratio ÷ Σ Ratio × 100 &nbsp;·&nbsp; Yarn Qty = Fabric Qty × Consuming % &nbsp;·&nbsp; Individual composition = Consuming % × yarn composition.</p>
       </section>
 
       <section class="view" id="department">
