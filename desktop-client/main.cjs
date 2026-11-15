@@ -8,7 +8,8 @@ const { spawn } = require("node:child_process");
 const JSZip = require("jszip/dist/jszip.js");
 const XLSX = require("xlsx");
 
-const DEFAULT_SHARE = "\\\\172.26.43.3\\ZKNG- Material code";
+const DEFAULT_SHARE = "\\\\172.26.43.3\\ZKNG- Material code\\ZBOM";
+const PREVIOUS_SHARE = "\\\\172.26.43.3\\ZKNG- Material code";
 const MATERIAL_PATTERN = /fabric\s*material\s*code/i;
 const SUMMARY_PATTERN = /(?:z|knitting)\s*summary|circular\s*knitting/i;
 const FINISH_TYPE_PATTERN = /(?:finish|finsih)\s*type\s*short\s*name/i;
@@ -392,11 +393,23 @@ async function generateCharacteristicsReadyWorkbook(materialRows, outputPath) {
 }
 
 async function getConfig() {
-  return readJson(userFile("config.json"), {
+  const config = await readJson(userFile("config.json"), {
     sharePath: DEFAULT_SHARE,
     autoUpdate: true,
     sources: {},
   });
+  // The LAN data moved one folder deeper on 2026-11-15
+  // (...\\ZKNG- Material code\\ZBOM). A computer that still has the old
+  // location saved switches over automatically and the new location is
+  // stored, so nobody has to retype it in Settings.
+  const savedShare = String(config.sharePath || "").trim().replace(/\\+$/, "");
+  if (!savedShare) {
+    config.sharePath = DEFAULT_SHARE;
+  } else if (savedShare.toLowerCase() === PREVIOUS_SHARE.toLowerCase()) {
+    config.sharePath = DEFAULT_SHARE;
+    writeJsonAtomic(userFile("config.json"), config).catch(() => {});
+  }
+  return config;
 }
 
 async function saveConfig(next) {

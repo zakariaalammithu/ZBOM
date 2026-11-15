@@ -33,4 +33,4 @@ This creates the Windows installer in `desktop-client/release/` (`ZBOM-Setup-1.0
 
 ## Data
 
-The app reads its source files from a LAN shared folder (default `\\172.26.43.3\ZKNG- Material code`) and keeps an offline cache. The `seed-data/` folder inside `desktop-client/` holds the bundled master templates, and the top-level `Code UPload file/`, `LSMW BOM Upload file/` and `Routing/` folders hold example input and ready output files.
+The app reads its source files from a LAN shared folder (default `\\172.26.43.3\ZKNG- Material code\ZBOM`) and keeps an offline cache. The `seed-data/` folder inside `desktop-client/` holds the bundled master templates, and the top-level `Code UPload file/`, `LSMW BOM Upload file/` and `Routing/` folders hold example input and ready output files.
