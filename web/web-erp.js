@@ -1037,10 +1037,6 @@
     },
     changeOwnPassword: async function () { return notAvailable(PASSWORD_CHANGE_MESSAGE); },
     setAdminPassword: async function () { return notAvailable(PASSWORD_CHANGE_MESSAGE); },
-    getRememberedLogin: async function () { return { savedAccounts: [], lastSelectedUsername: "" }; },
-    getSavedAccounts: async function () { return { savedAccounts: [], lastSelectedUsername: "" }; },
-    saveAccountLocally: async function () { return notAvailable(PHASE2_LOGIN); },
-    removeSavedAccount: async function () { return notAvailable(PHASE2_LOGIN); },
 
     // ---- uploads / imports / generation / downloads ----
     // The four upload modules are free for everyone (client-side, no

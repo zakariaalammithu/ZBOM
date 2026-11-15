@@ -406,47 +406,6 @@ async function saveConfig(next) {
   return merged;
 }
 
-async function getSavedAccountsLocally() {
-  const data = await readJson(userFile("saved-accounts.json"), { savedAccounts: [], lastSelectedUsername: "" });
-  return {
-    savedAccounts: Array.isArray(data.savedAccounts) ? data.savedAccounts : [],
-    lastSelectedUsername: String(data.lastSelectedUsername || ""),
-  };
-}
-
-async function saveAccountLocally({ username, password, fullName, role }) {
-  const normalized = String(username || "").trim().toLowerCase();
-  if (!normalized) return { ok: false };
-  const current = await getSavedAccountsLocally();
-  const list = current.savedAccounts.filter((acc) => String(acc.username || "").toLowerCase() !== normalized);
-  list.unshift({
-    username: normalized,
-    password: String(password || ""),
-    fullName: fullName || normalized,
-    role: role || "standard_user",
-    savedAt: new Date().toISOString(),
-  });
-  const updated = {
-    savedAccounts: list,
-    lastSelectedUsername: normalized,
-  };
-  await writeJsonAtomic(userFile("saved-accounts.json"), updated);
-  return { ok: true, data: updated };
-}
-
-async function removeSavedAccountLocally(username) {
-  const normalized = String(username || "").trim().toLowerCase();
-  const current = await getSavedAccountsLocally();
-  const list = current.savedAccounts.filter((acc) => String(acc.username || "").toLowerCase() !== normalized);
-  const lastSelected = current.lastSelectedUsername === normalized ? (list[0]?.username || "") : current.lastSelectedUsername;
-  const updated = {
-    savedAccounts: list,
-    lastSelectedUsername: lastSelected,
-  };
-  await writeJsonAtomic(userFile("saved-accounts.json"), updated);
-  return { ok: true, data: updated };
-}
-
 function normalizedUsername() {
   return String(os.userInfo().username || "").trim().toLowerCase();
 }
@@ -1852,8 +1811,10 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Every app launch starts in Guest mode. Saved credentials remain available
-  // for an explicit sign-in, but must never create an automatic admin session.
+  // Every app launch starts in Guest mode. The saved-accounts feature was
+  // removed (2026-11-15): no login is ever saved on this computer, and any
+  // saved-accounts.json left from an older version is deleted here.
+  fsp.unlink(userFile("saved-accounts.json")).catch(() => {});
   authenticatedAdminSessions.clear();
   accountActivitySessions.clear();
   ipcMain.handle("erp:get-state", async (event) => {
@@ -1953,10 +1914,6 @@ app.whenReady().then(async () => {
     return { ok: true, path: filePath };
   });
   ipcMain.handle("erp:open-path", (_event, target) => shell.openPath(target));
-  ipcMain.handle("erp:get-remembered-login", async () => getSavedAccountsLocally());
-  ipcMain.handle("erp:get-saved-accounts", async () => getSavedAccountsLocally());
-  ipcMain.handle("erp:save-account-locally", async (_event, payload) => saveAccountLocally(payload));
-  ipcMain.handle("erp:remove-saved-account", async (_event, username) => removeSavedAccountLocally(username));
   ipcMain.handle("erp:record-usage", async () => ({ ok: true }));
   ipcMain.handle("erp:get-characteristics-state", async (event) => {
     const access = await accessForEvent(event);
@@ -2358,16 +2315,6 @@ app.whenReady().then(async () => {
       console.warn("Login activity could not be saved:", error.message);
     });
 
-    if (payload?.remember !== false) {
-      saveAccountLocally({
-        username: result.access.username,
-        password: payload.password,
-        fullName: result.access.fullName,
-        role: result.access.role,
-      }).catch((error) => {
-        console.warn("Remembered login could not be saved:", error.message);
-      });
-    }
 
     return { ok: true, access: result.access, message: `Signed in as ${result.access.fullName}.` };
   });

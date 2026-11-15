@@ -2898,63 +2898,16 @@ async function initialize() {
   }, 60 * 1000);
 }
 
-async function renderSavedAccountOptions() {
-  const group = $("#savedAccountsGroup");
-  const select = $("#savedAccountSelect");
-  if (!group || !select) return;
-  
-  let data = { savedAccounts: [], lastSelectedUsername: "" };
-  try {
-    if (window.erp && typeof window.erp.getSavedAccounts === "function") {
-      data = await window.erp.getSavedAccounts();
-    }
-  } catch (err) {
-    console.warn("getSavedAccounts error:", err);
-  }
-
-  const list = Array.isArray(data.savedAccounts) ? data.savedAccounts : [];
-  if (!list.length) {
-    group.classList.add("hidden");
-    return;
-  }
-
-  group.classList.remove("hidden");
-  select.innerHTML = `<option value="">-- Choose a saved account on this computer --</option>`;
-  
-  let preselected = false;
-  list.forEach((acc) => {
-    const opt = document.createElement("option");
-    opt.value = acc.username;
-    opt.dataset.password = acc.password || "";
-    const roleTitle = ({ guest: "Guest User", standard_user: "Standard User", power_user: "Power User", master_user: "Master User", department_head: "Department Head", admin: "Admin", main_admin: "Main Admin" })[acc.role] || "Account";
-    opt.textContent = `👤 ${acc.fullName} (${acc.username}) — ${roleTitle}`;
-    if (acc.username === data.lastSelectedUsername || !preselected) {
-      opt.selected = true;
-      preselected = true;
-    }
-    select.appendChild(opt);
-  });
-
-  const selectedOpt = select.options[select.selectedIndex];
-  if (selectedOpt && selectedOpt.value) {
-    $("#adminLoginUsername").value = selectedOpt.value;
-    $("#adminLoginPassword").value = selectedOpt.dataset.password || "";
-  }
-}
-
 async function openAdminLogin() {
   const overlay = $("#adminLoginOverlay");
   if (overlay) overlay.classList.remove("hidden");
 
   const usernameInput = $("#adminLoginUsername");
   const passwordInput = $("#adminLoginPassword");
-  const rememberCheckbox = $("#rememberLogin");
   const errorMsg = $("#adminLoginError");
 
-  if (rememberCheckbox) rememberCheckbox.checked = true;
   if (errorMsg) errorMsg.classList.add("hidden");
 
-  renderSavedAccountOptions().catch(() => {});
 
   setTimeout(() => {
     if (usernameInput) (usernameInput.value ? passwordInput : usernameInput).focus();
@@ -2983,7 +2936,7 @@ async function confirmAdminLogin() {
   signInButton.textContent = "Signing In...";
   let result;
   try {
-    result = await window.erp.adminLogin({ username, password, remember: $("#rememberLogin").checked });
+    result = await window.erp.adminLogin({ username, password, remember: false });
   } catch (error) {
     $("#adminLoginError").textContent = `Sign in failed: ${error.message}`;
     $("#adminLoginError").classList.remove("hidden");
@@ -3057,7 +3010,7 @@ async function submitRegistration() {
     $("#registrationError").classList.remove("hidden");
     return;
   }
-  const login = await window.erp.adminLogin({ username: result.username, password, remember: true });
+  const login = await window.erp.adminLogin({ username: result.username, password, remember: false });
   if (login.ok) {
     await refreshAccess();
     $("#registrationOverlay").classList.add("hidden");
@@ -3712,29 +3665,6 @@ $("#goToLoginFromRestricted")?.addEventListener("click", () => {
 $("#adminLoginPassword")?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") $("#adminLoginPassword").focus();
 });
-$("#savedAccountSelect")?.addEventListener("change", (event) => {
-  const select = event.target;
-  const opt = select.options[select.selectedIndex];
-  if (opt && opt.value) {
-    $("#adminLoginUsername").value = opt.value;
-  } else {
-    $("#adminLoginUsername").value = "";
-  }
-});
-
-$("#forgetSavedAccount")?.addEventListener("click", async () => {
-  const username = $("#adminLoginUsername").value.trim();
-  if (!username) return;
-  if (window.confirm(`Remove saved login for ${username} on this computer?`)) {
-    if (window.erp && typeof window.erp.removeSavedAccount === "function") {
-      await window.erp.removeSavedAccount(username);
-    }
-    $("#adminLoginUsername").value = "";
-    await renderSavedAccountOptions();
-    showNotice(`Saved account ${username} removed from this computer.`, "info");
-  }
-});
-
 $("#adminLoginUsername")?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") confirmAdminLogin();
 });

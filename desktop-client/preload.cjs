@@ -17,7 +17,6 @@ contextBridge.exposeInMainWorld("erp", {
   uploadMasterSection: (section) => ipcRenderer.invoke("erp:upload-master-section", section),
   manageDepartment: (action) => ipcRenderer.invoke("erp:manage-department", action),
   adminLogin: (payload) => ipcRenderer.invoke("erp:admin-login", payload),
-  getRememberedLogin: () => ipcRenderer.invoke("erp:get-remembered-login"),
   registerAccount: (record) => ipcRenderer.invoke("erp:register-account", record),
   logout: () => ipcRenderer.invoke("erp:logout"),
   accountHeartbeat: () => ipcRenderer.invoke("erp:account-heartbeat"),
@@ -50,7 +49,4 @@ contextBridge.exposeInMainWorld("erp", {
   clearRoutingSession: (kind = "routing") => ipcRenderer.invoke("erp:clear-routing-session", kind),
   saveDepartmentFile: (payload) => ipcRenderer.invoke("erp:save-department-file", payload),
   reloadApp: () => ipcRenderer.invoke("erp:reload-app"),
-  getSavedAccounts: () => ipcRenderer.invoke("erp:get-saved-accounts"),
-  saveAccountLocally: (payload) => ipcRenderer.invoke("erp:save-account-locally", payload),
-  removeSavedAccount: (username) => ipcRenderer.invoke("erp:remove-saved-account", username),
 });
