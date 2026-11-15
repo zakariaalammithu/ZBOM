@@ -1064,7 +1064,9 @@ function prodAddFabric(name) {
 
 // ---- Yarn Calculation (Circular Knitting) ----
 // Formulae from the user's Yarn_Consumption_Fleece.xlsx (sheet "Sheet1").
-// Four fleece blocks; each yarn row has a Count Type, Yarn label, Yarn Count
+// Four fleece blocks from that file, plus the three fleece types from
+// FLEECE_YARN___CALCULATION.xlsx (Fleece, Two Thread Fleece, Three Thread
+// Fleece); each yarn row has a Count Type, Yarn label, Yarn Count
 // (Ne, denier, or Lycra), a Cotton/Poly/Others composition, Feeder and
 // Stitch Length. Ratio = Stitch Length x Feeder / Yarn Count; for denier
 // yarns Ratio = Denier x Feeder x Stitch Length / 5315; for Lycra the count
@@ -1079,12 +1081,18 @@ const FLEECE_BUILTIN_TYPES = [
   { value: "twoThreadNoPoly", label: "2 Thread - without Polyester" },
   { value: "threeThreadPoly", label: "3 Thread - with Polyester" },
   { value: "fourThread", label: "4 Thread - Cotton Count (Ne)" },
+  { value: "fleece", label: "Fleece" },
+  { value: "twoThreadFleece", label: "Two Thread Fleece" },
+  { value: "threeThreadFleece", label: "Three Thread Fleece" },
 ];
 const FLEECE_TYPE_SUBTITLES = {
   twoThread: "Plain + Loop — cotton and polyester.",
   twoThreadNoPoly: "Plain + Binding + Loop — all cotton, no polyester.",
   threeThreadPoly: "Plain + Filament Binding + Loop.",
   fourThread: "Four yarns — cotton count (Ne), including Lycra.",
+  fleece: "Three-thread fleece, filament not used — Face + Binder + Back. The Binder count follows the Face count, as in the sheet.",
+  twoThreadFleece: "Two-thread fleece — Face + Back.",
+  threeThreadFleece: "Three-thread fleece, filament used — Face + Filament Binder + Back.",
 };
 const FLEECE_SUGGESTED_FABRICS = ["Single Jersey", "Pique", "Rib", "Interlock"];
 const FLEECE_MAX_YARNS = 8;
@@ -1119,6 +1127,20 @@ function fleeceBuiltinDefaults() {
       { label: "Yarn-3", yarn: "10/1 CD", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.1 },
       { label: "Yarn-4 (Lycra)", yarn: "70D Lycra", kind: "Lycra", cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
+    fleece: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Face Loop", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.9 },
+      { label: "Binder", yarn: "", kind: "Mirror", mirror: 0, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 3.85 },
+      { label: "Back Loop", yarn: "", kind: "Ne", count: 5, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.95 },
+    ]},
+    twoThreadFleece: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Face Loop", yarn: "", kind: "Ne", count: 8, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 5 },
+      { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2 },
+    ]},
+    threeThreadFleece: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
+      { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
+      { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
+    ]},
   };
 }
 function fleeceDefaultState() {
@@ -1126,7 +1148,7 @@ function fleeceDefaultState() {
 }
 function fleeceNormalizeYarn(y) {
   const row = { label: "", yarn: "", kind: "Ne", count: "", denier: "", cotton: 100, poly: 0, others: 0, feeder: 1, sl: "", ...(y || {}) };
-  if (!["Ne", "Denier", "Lycra"].includes(row.kind)) row.kind = "Ne";
+  if (!["Ne", "Denier", "Lycra", "Mirror"].includes(row.kind)) row.kind = "Ne";
   return row;
 }
 function loadFleeceCalc() {
@@ -1190,6 +1212,10 @@ function fleeceFillTypeSelect() {
 }
 function fleeceCurrentData() { return fleeceCalc.data[fleeceCalc.type] || null; }
 function fleeceYarnCount(y, data) {
+  if (y.kind === "Mirror") {
+    const src = data && data.yarns && data.yarns[y.mirror];
+    return src ? fleeceNum(src.count) : NaN;
+  }
   if (y.kind === "Denier") return fleeceNum(y.denier);
   if (y.kind === "Lycra") {
     const f = fleeceNum(data && data.lycraFactor);
@@ -1212,7 +1238,7 @@ function fleeceYarnRatio(y, data) {
 function fleeceYarnLabel(y, data) {
   if (y.kind === "Denier") { const d = fleeceNum(y.denier); return Number.isFinite(d) ? `${d}D` : "—"; }
   if (y.kind === "Lycra") { const c = fleeceYarnCount(y, data); return Number.isFinite(c) ? c.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"; }
-  const c = fleeceNum(y.count);
+  const c = fleeceYarnCount(y, data);
   return Number.isFinite(c) ? `${c}/1` : "—";
 }
 function fleeceFmt(value, decimals) {
@@ -1301,7 +1327,7 @@ function renderFleeceMain() {
   const yarns = data ? data.yarns : [];
   if (body) {
     body.innerHTML = yarns.map((y, i) => {
-      const countCell = y.kind === "Lycra"
+      const countCell = y.kind === "Lycra" || y.kind === "Mirror"
         ? `<span class="fleece-readonly-count" data-count="${i}">—</span>`
         : `<input data-field="${y.kind === "Denier" ? "denier" : "count"}" type="number" min="0" step="any" value="${fleeceEsc(y.kind === "Denier" ? (y.denier ?? "") : (y.count ?? ""))}">`;
       return `<tr data-yarn="${i}">
