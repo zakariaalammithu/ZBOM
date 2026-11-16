@@ -871,15 +871,51 @@ function renderSummary() {
 //                             / (25.4 * 36 * 840 * YarnCount * 2.2046)
 // The two counter conversions in the sheet carry no efficiency factor (theoretical,
 // 100% efficiency); only the per-shift production uses the efficiency.
-// The same standard formula applies to every circular-knitting fabric, so a fabric
-// added later (Rib, Interlock, ...) reuses it with its own machine rows.
+// The standard formula is the same for every fabric, with a production factor:
+// x1 for single-bed fabrics, x2 for double-bed fabrics (needles = PI x Dia x
+// Gauge x 2 — see PROD_FABRIC_INFO below).
 const PROD_PI = 3.1416;
 const PROD_MM_PER_INCH = 25.4;
 const PROD_INCH_PER_YARD = 36;
 const PROD_YARDS_PER_HANK = 840;
 const PROD_LB_PER_KG = 2.2046;
-const PROD_BUILTIN_FABRICS = ["Single Jersey", "Pique"];
-const PROD_SUGGESTED_FABRICS = ["Rib", "Interlock"];
+// Production factor per fabric (researched 2026-11-16): needles =
+// PI x Dia x Gauge for a single-bed machine, x2 for a double-bed
+// machine — Rib, Interlock and other double-jersey fabrics have two
+// needle beds, so they knit twice the yarn per course at the same
+// stitch length; the weight constant is C = 1 for single-bed and C = 2
+// for balanced double-bed structures. Sources: textilecalculations.com
+// ("Important Formula for Knitting Production"), Toolsnests circular
+// knitting calculator, "Calculation in Weft Knitting" (C = 1 single
+// jersey / C = 2 double jersey). Lycra fabrics use the same factor as
+// their base fabric — the lycra yarn is fed together with the main
+// yarn and its weight is extra. Jacquard here is single-bed jacquard
+// (factor 1); set 2 for a double-bed jacquard. The factor is editable
+// per fabric below.
+const PROD_FABRIC_INFO = {
+  "Single Jersey": { factor: 1, note: "Single-bed fabric — one set of loops." },
+  "Lycra Single Jersey": { factor: 1, note: "Single-bed fabric with lycra fed together with the main yarn." },
+  Pique: { factor: 1, note: "Single-bed pique — same formula as Single Jersey." },
+  "Lycra Pique": { factor: 1, note: "Single-bed pique with lycra fed together with the main yarn." },
+  "Single Lacoste (S/L)": { factor: 1, note: "Single-bed lacoste (single pique) — tuck stitches, same formula." },
+  "Double Lacoste (D/L)": { factor: 1, note: "Double lacoste (double pique) — single-bed, same formula." },
+  Interlock: { factor: 2, note: "Double-bed fabric — two needle beds knit at every feeder." },
+  "Lycra Interlock": { factor: 2, note: "Double-bed interlock with lycra fed together with the main yarn." },
+  "Rib 1x1": { factor: 2, note: "Double-bed rib — dial + cylinder both knit." },
+  "Rib 2x1": { factor: 2, note: "Double-bed rib — dial + cylinder both knit." },
+  "Rib 2x2": { factor: 2, note: "Double-bed rib — dial + cylinder both knit." },
+  "Rib 2x3": { factor: 2, note: "Double-bed rib — dial + cylinder both knit." },
+  "Rib 3x3": { factor: 2, note: "Double-bed rib — dial + cylinder both knit." },
+  "Lycra Rib 1x1": { factor: 2, note: "Double-bed rib with lycra fed together with the main yarn." },
+  "Lycra Rib 2x1": { factor: 2, note: "Double-bed rib with lycra fed together with the main yarn." },
+  "Lycra Rib 2x2": { factor: 2, note: "Double-bed rib with lycra fed together with the main yarn." },
+  "Lycra Rib 2x3": { factor: 2, note: "Double-bed rib with lycra fed together with the main yarn." },
+  "Lycra Rib 3x3": { factor: 2, note: "Double-bed rib with lycra fed together with the main yarn." },
+  "Rib (Custom Ratio)": { factor: 2, note: "Double-bed rib — set your own face : back ratio below." },
+  "Rib-Interlock": { factor: 2, note: "Double-bed rib-interlock — two needle beds knit." },
+  Jacquard: { factor: 1, note: "Single-bed jacquard — set the factor to 2 for a double-bed jacquard." },
+};
+const PROD_BUILTIN_FABRICS = Object.keys(PROD_FABRIC_INFO);
 const PROD_STORAGE_KEY = "zbom-production-calculation-v1";
 const PROD_SAMPLE_ROW = { machine: "1", count: 50, stitchLength: 2.2, dia: 30, gauge: 28, feeders: 96, rpm: 25 };
 let prodCalc = loadProdCalc();
@@ -887,11 +923,13 @@ let prodCalc = loadProdCalc();
 function prodDefaultState() {
   return {
     fabric: "Single Jersey",
-    shiftHours: 8,
-    efficiency: 90,
+    shiftHours: 24,
+    efficiency: 85,
     targetProduction: 10,
     counterInput: 1100,
     addedFabrics: [],
+    factors: {},
+    ratios: {},
     rows: { "Single Jersey": [{ ...PROD_SAMPLE_ROW }], Pique: [{ ...PROD_SAMPLE_ROW }] },
   };
 }
@@ -903,6 +941,8 @@ function loadProdCalc() {
     const base = prodDefaultState();
     const merged = { ...base, ...parsed, rows: { ...base.rows, ...(parsed.rows || {}) } };
     merged.addedFabrics = (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !PROD_BUILTIN_FABRICS.includes(name));
+    merged.factors = { ...(parsed.factors || {}) };
+    merged.ratios = { ...(parsed.ratios || {}) };
     PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     return merged;
@@ -919,13 +959,33 @@ function prodEsc(value) {
 function prodAvailableFabrics() { return [...PROD_BUILTIN_FABRICS, ...prodCalc.addedFabrics]; }
 function prodRows() { return prodCalc.rows[prodCalc.fabric] || []; }
 function prodNum(value) { const n = parseFloat(value); return Number.isFinite(n) ? n : NaN; }
+function prodFactor() {
+  const saved = prodCalc.factors && prodCalc.factors[prodCalc.fabric];
+  const info = PROD_FABRIC_INFO[prodCalc.fabric];
+  const v = Number.isFinite(prodNum(saved)) ? prodNum(saved) : (info ? info.factor : 1);
+  return Number.isFinite(v) && v > 0 ? v : 1;
+}
+function prodRatio() {
+  const saved = prodCalc.ratios && prodCalc.ratios["Rib (Custom Ratio)"];
+  const face = saved ? prodNum(saved.face) : NaN;
+  const back = saved ? prodNum(saved.back) : NaN;
+  return { face: Number.isFinite(face) && face > 0 ? face : 2, back: Number.isFinite(back) && back > 0 ? back : 1 };
+}
+function prodRenderFactorNote() {
+  const note = $("#prodFactorNote");
+  if (!note) return;
+  const f = prodFactor();
+  const info = PROD_FABRIC_INFO[prodCalc.fabric];
+  const bed = f === 2 ? "Double-bed fabric" : f === 1 ? "Single-bed fabric" : "Custom factor";
+  note.textContent = info ? `${bed} — ${info.note}` : `${bed}.`;
+}
 function prodProductionPerShift(row) {
   const count = prodNum(row.count), sl = prodNum(row.stitchLength), dia = prodNum(row.dia);
   const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders), rpm = prodNum(row.rpm);
   if ([count, sl, dia, gauge, feeders, rpm].some((v) => !Number.isFinite(v) || v <= 0)) return NaN;
   const eff = prodCalc.efficiency / 100, hours = prodCalc.shiftHours;
   if (!Number.isFinite(eff) || eff <= 0 || !Number.isFinite(hours) || hours <= 0) return NaN;
-  return (PROD_PI * dia * gauge * sl * feeders * rpm * 60 * hours * eff)
+  return (PROD_PI * dia * gauge * sl * feeders * rpm * 60 * hours * eff * prodFactor())
     / (PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG);
 }
 function prodCounterFromProduction(row, kg) {
@@ -933,13 +993,13 @@ function prodCounterFromProduction(row, kg) {
   const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders);
   if ([count, sl, dia, gauge, feeders].some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(kg) || kg < 0) return NaN;
   return (kg * PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG)
-    / (PROD_PI * dia * gauge * feeders * sl);
+    / (PROD_PI * dia * gauge * feeders * sl * prodFactor());
 }
 function prodProductionFromCounter(row, counter) {
   const count = prodNum(row.count), sl = prodNum(row.stitchLength), dia = prodNum(row.dia);
   const gauge = prodNum(row.gauge), feeders = prodNum(row.feeders);
   if ([count, sl, dia, gauge, feeders].some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(counter) || counter < 0) return NaN;
-  return (PROD_PI * dia * gauge * sl * feeders * counter)
+  return (PROD_PI * dia * gauge * sl * feeders * counter * prodFactor())
     / (PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * count * PROD_LB_PER_KG);
 }
 function prodFmt(value, decimals = 2) {
@@ -952,10 +1012,7 @@ function prodFillFabricSelect() {
   const select = $("#prodFabricSelect");
   if (!select) return;
   const available = prodAvailableFabrics();
-  const pending = PROD_SUGGESTED_FABRICS.filter((name) => !available.includes(name));
-  let html = `<optgroup label="Ready">` + available.map((name) => `<option value="${prodEsc(name)}">${prodEsc(name)}</option>`).join("") + `</optgroup>`;
-  if (pending.length) html += `<optgroup label="Not added yet">` + pending.map((name) => `<option value="${prodEsc(name)}">${prodEsc(name)} — not added yet</option>`).join("") + `</optgroup>`;
-  select.innerHTML = html;
+  select.innerHTML = available.map((name) => `<option value="${prodEsc(name)}">${prodEsc(name)}</option>`).join("");
   select.value = prodCalc.fabric;
   if (select.value !== prodCalc.fabric) select.value = available[0];
 }
@@ -964,6 +1021,15 @@ function renderProductionCalculation() {
   const shiftInput = $("#prodShiftHours"), effInput = $("#prodEfficiency");
   if (shiftInput) shiftInput.value = prodCalc.shiftHours;
   if (effInput) effInput.value = prodCalc.efficiency;
+  const factorInput = $("#prodFactor");
+  if (factorInput) factorInput.value = prodFactor();
+  prodRenderFactorNote();
+  const ratioRow = $("#prodRatioRow");
+  if (ratioRow) ratioRow.classList.toggle("hidden", prodCalc.fabric !== "Rib (Custom Ratio)");
+  const ratio = prodRatio();
+  const ratioFace = $("#prodRatioFace"), ratioBack = $("#prodRatioBack");
+  if (ratioFace) ratioFace.value = ratio.face;
+  if (ratioBack) ratioBack.value = ratio.back;
   const ready = prodAvailableFabrics().includes(prodCalc.fabric);
   $("#prodCalcBody")?.classList.toggle("hidden", !ready);
   const notice = $("#prodFabricNotice");
@@ -3213,6 +3279,9 @@ $("#diaSummarySearch")?.addEventListener("input", debounce(renderDiaWiseSummary,
 $("#prodFabricSelect")?.addEventListener("change", (event) => { prodCalc.fabric = event.target.value; saveProdCalc(); renderProductionCalculation(); });
 $("#prodShiftHours")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodShiftHours").value); if (Number.isFinite(v) && v > 0) { prodCalc.shiftHours = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
 $("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodEfficiency").value); if (Number.isFinite(v) && v > 0 && v <= 100) { prodCalc.efficiency = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
+$("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; saveProdCalc(); prodRenderFactorNote(); renderProdTable(); renderProdReverse(); } }, 250));
+$("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
+$("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddFabricToggle")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.toggle("hidden"); $("#prodNewFabricName")?.focus(); });
 $("#prodAddFabricBtn")?.addEventListener("click", () => prodAddFabric($("#prodNewFabricName")?.value));
 $("#prodNewFabricName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") prodAddFabric(event.target.value); });

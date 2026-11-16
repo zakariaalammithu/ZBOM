@@ -426,6 +426,10 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-calc-filter-row select,.prod-calc-filter-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:150px}
 .prod-calc-filter-row button{height:34px}
 .prod-calc-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.prod-calc-factor-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:12px}
+.prod-calc-factor-row label{display:grid;gap:4px;color:#52616e;font-size:9px;font-weight:600}
+.prod-calc-factor-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:80px}
+.prod-calc-factor-row small{color:var(--muted);font-size:9px;align-self:center}
 .prod-calc-add input{height:34px;border:1px solid #a8b3bd;padding:0 9px;min-width:220px}
 .prod-calc-add small{color:var(--muted);font-size:9px}
 .prod-quick-add{display:flex;gap:6px;align-items:center;font-size:9px;color:var(--muted)}
