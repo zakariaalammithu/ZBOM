@@ -333,6 +333,13 @@
             <button class="secondary" id="prodReset" type="button">Reset to Sample</button>
             <span class="prod-total">Total Production / Shift: <b id="prodTotal">0 kg</b></span>
           </div>
+          <div class="prod-lycra-row hidden" id="prodLycraRow">
+            <label>Lycra denier (D)<input id="prodLycraDenier" type="number" min="1" step="1" value="40"></label>
+            <span class="prod-lycra-info">Lycra count: <b id="prodLycraCount">—</b></span>
+            <span class="prod-lycra-info">Lycra production / Shift: <b id="prodLycraProduction">—</b></span>
+            <span class="prod-lycra-info">Total with lycra: <b id="prodLycraTotal">—</b></span>
+            <small>Lycra uses the same machine settings and stitch length; count = 5315 ÷ denier.</small>
+          </div>
           <div class="summary-cards prod-reverse">
             <div>
               <small>Counter from Production</small>
