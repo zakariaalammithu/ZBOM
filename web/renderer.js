@@ -1027,6 +1027,16 @@ function prodLycraDenierFor(row) {
 function prodLycraPerShift(row) {
   return prodProductionFor(row, 5315 / prodLycraDenierFor(row));
 }
+// A Lycra fabric's machine has two rows but ONE production result:
+// the main yarn plus the lycra yarn together (one machine, one
+// fabric). Other fabrics have just the main yarn.
+function prodRowProduction(row) {
+  const main = prodProductionPerShift(row);
+  if (!Number.isFinite(main)) return main;
+  if (!prodCalc.fabric.includes("Lycra")) return main;
+  const lycra = prodLycraPerShift(row);
+  return Number.isFinite(lycra) ? main + lycra : main;
+}
 function prodUpdateLycraRow(i) {
   const row = prodRows()[i];
   const tr = document.querySelector(`#prodTableBody [data-lycra-row="${i}"]`);
@@ -1040,8 +1050,6 @@ function prodUpdateLycraRow(i) {
     const cell = tr.querySelector(`[data-mirror="${key}"]`);
     if (cell) cell.textContent = row[key] ?? "";
   });
-  const result = tr.querySelector(`[data-lycra-result="${i}"]`);
-  if (result) result.textContent = prodKg(prodLycraPerShift(row));
 }
 function prodUpdateLycraTotals() {
   const wrap = $("#prodLycraTotals");
@@ -1051,11 +1059,8 @@ function prodUpdateLycraTotals() {
   if (!isLycra) return;
   const rows = prodRows();
   const lycraTotal = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
-  const mainTotal = rows.reduce((s, r) => s + (prodProductionPerShift(r) || 0), 0);
   const prodEl = $("#prodLycraProductionTotal");
   if (prodEl) prodEl.textContent = `${prodFmt(lycraTotal)} kg`;
-  const totalEl = $("#prodLycraTotal");
-  if (totalEl) totalEl.textContent = `${prodFmt(mainTotal + lycraTotal)} kg`;
 }
 
 function prodCounterFromProduction(row, kg) {
@@ -1133,7 +1138,7 @@ function renderProdTable() {
         if (c.key) return `<td><input data-field="${c.key}" type="number" min="0" step="${c.key === "feeders" ? "1" : "any"}" value="${prodEsc(row[c.key] ?? "")}"></td>`;
         return `<td><input data-field="extra" data-extra="${prodEsc(c.label)}" value="${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}"></td>`;
       }).join("")}
-      <td class="prod-result" data-result="${i}">${prodKg(prodProductionPerShift(row))}</td>
+      <td class="prod-result" data-result="${i}">${prodKg(prodRowProduction(row))}</td>
       <td><button type="button" class="secondary prod-remove-row" data-row="${i}" title="Remove machine">✕</button></td>
     </tr>`;
     if (!isLycra) return main;
@@ -1146,7 +1151,7 @@ function renderProdTable() {
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
-      <td class="prod-result" data-lycra-result="${i}">${prodKg(prodLycraPerShift(row))}</td>
+      <td></td>
       <td></td>
     </tr>`;
     return main + lycra;
@@ -1156,7 +1161,7 @@ function renderProdTable() {
 function prodUpdateTotals() {
   const rows = prodRows();
   prodUpdateLycraTotals();
-  const total = rows.reduce((sum, row) => sum + (prodProductionPerShift(row) || 0), 0);
+  const total = rows.reduce((sum, row) => sum + (prodRowProduction(row) || 0), 0);
   const totalEl = $("#prodTotal");
   if (totalEl) totalEl.textContent = `${prodFmt(total)} kg`;
   const matches = $("#prodMatches");
@@ -1165,7 +1170,7 @@ function prodUpdateTotals() {
 function prodRecalcRow(i) {
   const row = prodRows()[i];
   const cell = document.querySelector(`#prodTableBody [data-result="${i}"]`);
-  if (cell && row) cell.textContent = prodKg(prodProductionPerShift(row));
+  if (cell && row) cell.textContent = prodKg(prodRowProduction(row));
   prodUpdateLycraRow(i);
   prodUpdateTotals();
   prodUpdateReverseResults();
@@ -1298,7 +1303,7 @@ function prodExportExcel() {
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const rows = prodRows();
   if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
-  const values = rows.map((row) => ({ row, p: prodProductionPerShift(row) }));
+  const values = rows.map((row) => ({ row, p: prodRowProduction(row) }));
   const total = values.reduce((s, v) => s + (v.p || 0), 0);
   const isLycra = prodCalc.fabric.includes("Lycra");
   const lycraValues = isLycra ? values.map(({ row }) => prodLycraPerShift(row)) : [];
@@ -1332,7 +1337,7 @@ function prodExportExcel() {
     ...values.map(({ row, p }) => [row.machine ?? "", Number.isFinite(p) ? Number(p.toFixed(2)) : ""]),
     ["Total", Number(total.toFixed(2))],
   ];
-  if (isLycra) prodData.push(["Lycra production", Number(lycraTotal.toFixed(2))], ["Total with lycra", Number((total + lycraTotal).toFixed(2))]);
+  if (isLycra) prodData.push(["Lycra production", Number(lycraTotal.toFixed(2))]);
   const ws2 = window.XLSX.utils.aoa_to_sheet(prodData);
   ws2["!cols"] = [{ wch: 18 }, { wch: 24 }];
   window.XLSX.utils.book_append_sheet(wb, ws2, "Production");
