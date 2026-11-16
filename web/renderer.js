@@ -3626,8 +3626,10 @@ $("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric
 $("#prodTableBody")?.addEventListener("input", (event) => {
   const input = event.target.closest("input[data-field]");
   if (!input) return;
-  const tr = input.closest("tr[data-row]");
-  const row = prodRows()[Number(tr?.dataset.row)];
+  // The Lycra row below a machine has data-lycra-row instead of data-row.
+  const tr = input.closest("tr[data-row]") || input.closest("tr[data-lycra-row]");
+  const idx = Number(tr?.dataset.row ?? tr?.dataset.lycraRow);
+  const row = prodRows()[idx];
   if (!row) return;
   if (input.dataset.field === "extra") {
     if (!row.extra) row.extra = {};
@@ -3636,7 +3638,7 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
     row[input.dataset.field] = input.value;
   }
   saveProdCalc();
-  prodRecalcRow(Number(tr.dataset.row));
+  prodRecalcRow(idx);
   if (input.dataset.field === "machine") renderProdReverse();
 });
 $("#prodTableBody")?.addEventListener("click", (event) => {
