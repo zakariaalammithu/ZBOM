@@ -930,7 +930,7 @@ function prodDefaultState() {
     addedFabrics: [],
     factors: {},
     ratios: {},
-    rows: { "Single Jersey": [{ ...PROD_SAMPLE_ROW }], Pique: [{ ...PROD_SAMPLE_ROW }] },
+    rows: Object.fromEntries(PROD_BUILTIN_FABRICS.map((name) => [name, [{ ...PROD_SAMPLE_ROW }]])),
   };
 }
 function loadProdCalc() {
