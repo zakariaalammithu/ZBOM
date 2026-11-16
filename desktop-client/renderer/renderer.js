@@ -1030,6 +1030,8 @@ function renderProductionCalculation() {
   const ratioFace = $("#prodRatioFace"), ratioBack = $("#prodRatioBack");
   if (ratioFace) ratioFace.value = ratio.face;
   if (ratioBack) ratioBack.value = ratio.back;
+  const inputFabric = $("#prodInputFabric");
+  if (inputFabric) inputFabric.textContent = prodCalc.fabric;
   const ready = prodAvailableFabrics().includes(prodCalc.fabric);
   $("#prodCalcBody")?.classList.toggle("hidden", !ready);
   const notice = $("#prodFabricNotice");
@@ -1127,6 +1129,172 @@ function prodAddFabric(name) {
   showNotice(`${clean} production calculation added.`, "success");
 }
 
+
+
+// ---- Production Calculation: bulk Excel import / export ("Input Name") ----
+// Uses the vendored SheetJS (window.XLSX), loaded on the web and in the
+// desktop app. The template has the 7 input columns; the export adds a
+// "Production / Shift (kg)" column plus a separate "Production" sheet.
+const PROD_IMPORT_COLUMNS = [
+  { key: "machine", label: "M/C No", match: ["m/c no", "machine", "m/c", "mc no", "m/c no."] },
+  { key: "count", label: "Yarn Count (Ne)", match: ["yarn count (ne)", "yarn count", "count", "count ne", "count (ne)"] },
+  { key: "stitchLength", label: "Stitch Length (mm)", match: ["stitch length (mm)", "stitch length", "s/l", "sl", "stitch length mm"] },
+  { key: "dia", label: "Dia (inch)", match: ["dia (inch)", "dia", "diameter", "diameter (inch)"] },
+  { key: "gauge", label: "Gauge", match: ["gauge"] },
+  { key: "feeders", label: "No of Feeder", match: ["no of feeder", "no. of feeder", "feeders", "feeder", "no of feeders"] },
+  { key: "rpm", label: "RPM", match: ["rpm"] },
+];
+function prodDownloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function prodXlsxMime() { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; }
+function prodDownloadTemplate() {
+  if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
+  const wb = window.XLSX.utils.book_new();
+  const header = PROD_IMPORT_COLUMNS.map((c) => c.label);
+  const ws = window.XLSX.utils.aoa_to_sheet([header]);
+  ws["!cols"] = header.map(() => ({ wch: 18 }));
+  window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
+  const readme = window.XLSX.utils.aoa_to_sheet([
+    ["How to use this template"],
+    ["Fill one machine per row, starting at row 2."],
+    ["Do not change the header names in row 1."],
+    ["M/C No can be a number or a name."],
+    ["All other columns must be numbers greater than 0."],
+    ["Production / Shift (kg) is calculated by ZBOM when you upload — do not add it."],
+    ["Save the file, then upload it with the Upload button in Production Calculation."],
+  ]);
+  readme["!cols"] = [{ wch: 95 }];
+  window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
+  const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
+}
+function prodExportExcel() {
+  if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
+  const rows = prodRows();
+  if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
+  const values = rows.map((row) => ({ row, p: prodProductionPerShift(row) }));
+  const total = values.reduce((s, v) => s + (v.p || 0), 0);
+  const header = [...PROD_IMPORT_COLUMNS.map((c) => c.label), "Production / Shift (kg)"];
+  const data = values.map(({ row, p }) => [
+    row.machine ?? "", prodNum(row.count), prodNum(row.stitchLength), prodNum(row.dia),
+    prodNum(row.gauge), prodNum(row.feeders), prodNum(row.rpm),
+    Number.isFinite(p) ? Number(p.toFixed(2)) : "",
+  ]);
+  data.push(["Total", "", "", "", "", "", "", Number(total.toFixed(2))]);
+  const wb = window.XLSX.utils.book_new();
+  const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
+  ws["!cols"] = [12, 16, 18, 12, 10, 14, 10, 22].map((wch) => ({ wch }));
+  window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
+  const prodData = [
+    ["Fabric", prodCalc.fabric],
+    ["Shift Hours", prodCalc.shiftHours],
+    ["Efficiency %", prodCalc.efficiency],
+    ["Production factor", prodFactor()],
+    [],
+    ["M/C No", "Production / Shift (kg)"],
+    ...values.map(({ row, p }) => [row.machine ?? "", Number.isFinite(p) ? Number(p.toFixed(2)) : ""]),
+    ["Total", Number(total.toFixed(2))],
+  ];
+  const ws2 = window.XLSX.utils.aoa_to_sheet(prodData);
+  ws2["!cols"] = [{ wch: 18 }, { wch: 24 }];
+  window.XLSX.utils.book_append_sheet(wb, ws2, "Production");
+  const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const safe = String(prodCalc.fabric).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "Fabric";
+  const date = new Date().toISOString().slice(0, 10);
+  prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), `ZBOM-Production-${safe}-${date}.xlsx`);
+  showNotice(`Downloaded ${rows.length} machine${rows.length === 1 ? "" : "s"} for ${prodCalc.fabric} as Excel.`, "success");
+}
+function prodFindColumn(headers, col) {
+  const hs = headers.map((h) => String(h ?? "").trim().toLowerCase());
+  for (const alias of col.match) {
+    const i = hs.indexOf(alias);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+function prodParseImport(workbook) {
+  const sheetName = workbook.SheetNames.includes("Machines") ? "Machines" : workbook.SheetNames[0];
+  const ws = workbook.Sheets[sheetName];
+  if (!ws) return { rows: [], problems: [], missing: ["the file has no sheets"] };
+  const aoa = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
+  if (!aoa.length) return { rows: [], problems: [], missing: ["the sheet is empty"] };
+  const headers = aoa[0].map((h) => String(h ?? "").trim());
+  const colIndex = {};
+  const missing = [];
+  PROD_IMPORT_COLUMNS.forEach((col) => {
+    const i = prodFindColumn(headers, col);
+    if (i < 0) missing.push(col.label); else colIndex[col.key] = i;
+  });
+  if (missing.length) return { rows: [], problems: [], missing };
+  const rows = [], problems = [];
+  for (let r = 1; r < aoa.length; r++) {
+    const line = aoa[r];
+    if (!line || line.every((v) => v === "" || v === null || v === undefined)) continue;
+    const sheetRow = r + 1;
+    const get = (key) => line[colIndex[key]];
+    const rowProblems = [];
+    const machine = get("machine");
+    if (machine === "" || machine === null || machine === undefined) rowProblems.push("M/C No is missing");
+    const vals = {};
+    ["count", "stitchLength", "dia", "gauge", "feeders", "rpm"].forEach((key) => {
+      const label = PROD_IMPORT_COLUMNS.find((c) => c.key === key).label;
+      const v = prodNum(get(key));
+      if (!Number.isFinite(v) || v <= 0) rowProblems.push(`${label} must be a number greater than 0`);
+      else vals[key] = v;
+    });
+    if (rowProblems.length) { problems.push({ row: sheetRow, message: rowProblems.join("; ") }); continue; }
+    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia, gauge: vals.gauge, feeders: vals.feeders, rpm: vals.rpm });
+  }
+  return { rows, problems, missing: [] };
+}
+function prodProblemsHtml(problems) {
+  if (!problems.length) return "";
+  const shown = problems.slice(0, 50);
+  const more = problems.length - shown.length;
+  return `<ul class="prod-import-problems">` + shown.map((p) => `<li>Row ${p.row}: ${prodEsc(p.message)}</li>`).join("") + `</ul>` + (more > 0 ? `<p class="prod-import-warn">…and ${more} more problem rows.</p>` : "");
+}
+async function prodHandleUpload(file) {
+  const report = $("#prodImportReport");
+  const setReport = (html) => { if (report) report.innerHTML = html; };
+  if (!file) return;
+  if (!window.XLSX) { setReport(`<p class="prod-import-error">Excel support is not available in this version.</p>`); return; }
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = window.XLSX.read(buf, { type: "array" });
+    const { rows, problems, missing } = prodParseImport(wb);
+    if (missing.length) {
+      setReport(`<p class="prod-import-error">Could not import <b>${prodEsc(file.name)}</b> — missing column${missing.length === 1 ? "" : "s"}: ${missing.map(prodEsc).join(", ")}. Please use the downloaded template.</p>`);
+      showNotice("Import failed — a required column is missing. See the Input Name panel.", "warning");
+      return;
+    }
+    if (!rows.length) {
+      setReport(`<p class="prod-import-error">No valid machine rows found in <b>${prodEsc(file.name)}</b>${problems.length ? ` (${problems.length} row${problems.length === 1 ? "" : "s"} had problems)` : ""}. Please check the file and try again.</p>` + prodProblemsHtml(problems));
+      showNotice("Import failed — no valid machine rows found.", "warning");
+      return;
+    }
+    prodCalc.rows[prodCalc.fabric] = rows;
+    saveProdCalc();
+    renderProdTable();
+    renderProdReverse();
+    const ok = `<p class="prod-import-ok">Imported <b>${rows.length}</b> machine${rows.length === 1 ? "" : "s"} into <b>${prodEsc(prodCalc.fabric)}</b> from <b>${prodEsc(file.name)}</b>.</p>`;
+    const bad = problems.length
+      ? `<p class="prod-import-warn">${problems.length} row${problems.length === 1 ? "" : "s"} had problems and were skipped:</p>` + prodProblemsHtml(problems)
+      : `<p class="prod-import-ok">All rows were valid.</p>`;
+    setReport(ok + bad);
+    showNotice(`Imported ${rows.length} machines into ${prodCalc.fabric}${problems.length ? ` — ${problems.length} rows skipped, see the Input Name panel.` : "."}`, problems.length ? "warning" : "success");
+  } catch (e) {
+    setReport(`<p class="prod-import-error">Could not read <b>${prodEsc(file.name)}</b> — the file may be damaged or not an Excel file.</p>`);
+    showNotice("Import failed — the file could not be read.", "warning");
+  }
+}
 
 // ---- Yarn Calculation (Circular Knitting) ----
 // Formulae from the user's Yarn_Consumption_Fleece.xlsx (sheet "Sheet1").
@@ -3309,6 +3477,11 @@ $("#prodTableBody")?.addEventListener("click", (event) => {
   renderProdTable();
   renderProdReverse();
 });
+$("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
+$("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
+$("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
+$("#prodUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
+$("#prodDownloadExcelBtn")?.addEventListener("click", prodExportExcel);
 $("#prodCounterMachine")?.addEventListener("change", prodUpdateReverseResults);
 $("#prodProductionMachine")?.addEventListener("change", prodUpdateReverseResults);
 $("#prodTargetProduction")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodTargetProduction").value); if (Number.isFinite(v)) { prodCalc.targetProduction = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));

@@ -292,6 +292,7 @@
             <label>Shift Hours<input id="prodShiftHours" type="number" min="1" max="24" step="0.5" value="24"></label>
             <label>Efficiency %<input id="prodEfficiency" type="number" min="1" max="100" step="1" value="85"></label>
             <button class="secondary" id="prodAddFabricToggle" type="button">+ Add Fabric</button>
+            <button class="secondary" id="prodInputToggle" type="button">Input Name</button>
           </div>
           <div class="prod-calc-factor-row">
             <label>Production factor<input id="prodFactor" type="number" min="0.1" step="0.1" value="1"></label>
@@ -306,6 +307,16 @@
             <input id="prodNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
             <button class="primary" id="prodAddFabricBtn" type="button">Add Fabric Calculation</button>
             <small>Added fabrics use the same standard circular-knitting formula, with production factor ×1 unless you change it.</small>
+          </div>
+          <div class="prod-calc-input hidden" id="prodInputPanel">
+            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below.</p>
+            <div class="prod-input-actions">
+              <button class="secondary" id="prodDownloadTemplateBtn" type="button">Download Template</button>
+              <button class="primary" id="prodUploadBtn" type="button">Upload Excel</button>
+              <input type="file" id="prodUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
+              <button class="secondary" id="prodDownloadExcelBtn" type="button">Download Excel</button>
+            </div>
+            <div id="prodImportReport"></div>
           </div>
           <div class="prod-calc-notice hidden" id="prodFabricNotice"></div>
         </div>
@@ -599,6 +610,7 @@
       };
     }
   </script>
+  <script src="vendor/xlsx.full.min.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
