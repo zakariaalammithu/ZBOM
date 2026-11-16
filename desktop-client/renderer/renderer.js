@@ -1016,28 +1016,43 @@ function prodProductionPerShift(row) {
 // Lycra yarn production uses the same formula and machine settings as the
 // main yarn; the lycra count in Ne is 5315 / denier (the same denier
 // conversion the Yarn Calculation uses), with the main yarn's stitch
-// length. Only the denier is entered — one value per fabric.
-function prodLycraDenier() {
-  const saved = prodCalc.lycra && prodCalc.lycra[prodCalc.fabric];
-  const v = prodNum(saved);
+// length. Each machine has its own Lycra row in the table, right below
+// the machine row: the same settings, with a denier input in place of
+// the Yarn Count. Enter the denier (20, 30, 40, 50, 100, 150, 200 or
+// any number) and the system converts it to the count automatically.
+function prodLycraDenierFor(row) {
+  const v = prodNum(row && row.lycraDenier);
   return Number.isFinite(v) && v > 0 ? v : 40;
 }
 function prodLycraPerShift(row) {
-  return prodProductionFor(row, 5315 / prodLycraDenier());
+  return prodProductionFor(row, 5315 / prodLycraDenierFor(row));
 }
-function prodUpdateLycra() {
-  const rowEl = $("#prodLycraRow");
-  if (!rowEl) return;
+function prodUpdateLycraRow(i) {
+  const row = prodRows()[i];
+  const tr = document.querySelector(`#prodTableBody [data-lycra-row="${i}"]`);
+  if (!tr || !row) return;
+  const denier = prodLycraDenierFor(row);
+  const label = tr.querySelector(".prod-lycra-label");
+  if (label) label.textContent = `${row.machine ?? i + 1} · Lycra`;
+  const countEl = tr.querySelector(".prod-lycra-count");
+  if (countEl) countEl.textContent = `= ${prodFmt(5315 / denier, 2)} Ne`;
+  ["stitchLength", "dia", "gauge", "feeders", "rpm"].forEach((key) => {
+    const cell = tr.querySelector(`[data-mirror="${key}"]`);
+    if (cell) cell.textContent = row[key] ?? "";
+  });
+  const result = tr.querySelector(`[data-lycra-result="${i}"]`);
+  if (result) result.textContent = prodKg(prodLycraPerShift(row));
+}
+function prodUpdateLycraTotals() {
+  const wrap = $("#prodLycraTotals");
+  if (!wrap) return;
   const isLycra = prodCalc.fabric.includes("Lycra");
-  rowEl.classList.toggle("hidden", !isLycra);
+  wrap.classList.toggle("hidden", !isLycra);
   if (!isLycra) return;
-  const denier = prodLycraDenier();
-  const countEl = $("#prodLycraCount");
-  if (countEl) countEl.textContent = `${prodFmt(5315 / denier, 2)} Ne`;
   const rows = prodRows();
   const lycraTotal = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
   const mainTotal = rows.reduce((s, r) => s + (prodProductionPerShift(r) || 0), 0);
-  const prodEl = $("#prodLycraProduction");
+  const prodEl = $("#prodLycraProductionTotal");
   if (prodEl) prodEl.textContent = `${prodFmt(lycraTotal)} kg`;
   const totalEl = $("#prodLycraTotal");
   if (totalEl) totalEl.textContent = `${prodFmt(mainTotal + lycraTotal)} kg`;
@@ -1087,8 +1102,6 @@ function renderProductionCalculation() {
   if (ratioBack) ratioBack.value = ratio.back;
   const inputFabric = $("#prodInputFabric");
   if (inputFabric) inputFabric.textContent = prodCalc.fabric;
-  const lycraInput = $("#prodLycraDenier");
-  if (lycraInput) lycraInput.value = prodLycraDenier();
   const ready = prodAvailableFabrics().includes(prodCalc.fabric);
   $("#prodCalcBody")?.classList.toggle("hidden", !ready);
   const notice = $("#prodFabricNotice");
@@ -1111,7 +1124,9 @@ function renderProdTable() {
   if (!body) return;
   const rows = prodRows();
   const columns = prodColumns();
-  body.innerHTML = rows.map((row, i) => `
+  const isLycra = prodCalc.fabric.includes("Lycra");
+  body.innerHTML = rows.map((row, i) => {
+    const main = `
     <tr data-row="${i}">
       ${columns.map((c) => {
         if (c.key === "machine") return `<td><input data-field="machine" value="${prodEsc(row.machine ?? "")}" inputmode="numeric"></td>`;
@@ -1120,12 +1135,27 @@ function renderProdTable() {
       }).join("")}
       <td class="prod-result" data-result="${i}">${prodKg(prodProductionPerShift(row))}</td>
       <td><button type="button" class="secondary prod-remove-row" data-row="${i}" title="Remove machine">✕</button></td>
-    </tr>`).join("");
+    </tr>`;
+    if (!isLycra) return main;
+    const denier = prodLycraDenierFor(row);
+    const lycra = `
+    <tr class="prod-lycra-table-row" data-lycra-row="${i}">
+      ${columns.map((c) => {
+        if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
+        if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
+        if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
+        return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
+      }).join("")}
+      <td class="prod-result" data-lycra-result="${i}">${prodKg(prodLycraPerShift(row))}</td>
+      <td></td>
+    </tr>`;
+    return main + lycra;
+  }).join("");
   prodUpdateTotals();
 }
 function prodUpdateTotals() {
   const rows = prodRows();
-  prodUpdateLycra();
+  prodUpdateLycraTotals();
   const total = rows.reduce((sum, row) => sum + (prodProductionPerShift(row) || 0), 0);
   const totalEl = $("#prodTotal");
   if (totalEl) totalEl.textContent = `${prodFmt(total)} kg`;
@@ -1136,6 +1166,7 @@ function prodRecalcRow(i) {
   const row = prodRows()[i];
   const cell = document.querySelector(`#prodTableBody [data-result="${i}"]`);
   if (cell && row) cell.textContent = prodKg(prodProductionPerShift(row));
+  prodUpdateLycraRow(i);
   prodUpdateTotals();
   prodUpdateReverseResults();
 }
@@ -1232,12 +1263,36 @@ function prodDownloadTemplate() {
     ["All other columns must be numbers greater than 0."],
     ["Production / Shift (kg) is calculated by ZBOM when you upload — do not add it."],
     ["You can add your own columns after these 7 (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file."],
+    ["For Lycra fabrics, a Lycra row appears below each machine in the app — enter the denier there (for example 40); the lycra count and production are calculated automatically."],
     ["Save the file, then upload it with the Upload button in Production Calculation."],
   ]);
   readme["!cols"] = [{ wch: 95 }];
   window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
   const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
   prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
+}
+function prodDownloadExample() {
+  if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
+  const wb = window.XLSX.utils.book_new();
+  const header = [...PROD_IMPORT_COLUMNS.map((c) => c.label), "Color", "Operator Name"];
+  const ws = window.XLSX.utils.aoa_to_sheet([header,
+    [1, 50, 2.2, 30, 28, 96, 25, "Red", "Rahim"],
+    [2, 30, 2.6, 30, 28, 90, 22, "Blue", "Karim"],
+    [3, 50, 2.2, 30, 28, 96, 25, "Green", ""],
+  ]);
+  ws["!cols"] = [12, 16, 18, 12, 10, 14, 10, 16, 16].map((wch) => ({ wch }));
+  window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
+  const readme = window.XLSX.utils.aoa_to_sheet([
+    ["Example file — upload it to see how the import works"],
+    ["These 3 machines are already filled in. Upload this file with the Upload Excel button — the machines will appear in the table with their Production / Shift."],
+    ["Then change any value, add more rows, or add your own columns (for example Color, Balancer Qty, Operator Name) — extra columns are kept and returned in the download."],
+    ["For Lycra fabrics, a Lycra row appears below each machine in the app — enter the denier there (for example 40); the lycra count and production are calculated automatically."],
+  ]);
+  readme["!cols"] = [{ wch: 95 }];
+  window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
+  const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Example.xlsx");
+  showNotice("Example file downloaded — upload it with the Upload Excel button.", "success");
 }
 function prodExportExcel() {
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
@@ -1253,19 +1308,19 @@ function prodExportExcel() {
   // order — then the calculated Production column(s).
   const columns = prodColumns();
   const prodCell = (row, c) => c.key === "machine" ? (row.machine ?? "") : c.key ? prodNum(row[c.key]) : (row.extra && row.extra[c.label] != null ? row.extra[c.label] : "");
-  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...(isLycra ? ["Lycra Production (kg)"] : [])];
+  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...(isLycra ? ["Lycra Denier (D)", "Lycra Production (kg)"] : [])];
   const data = values.map(({ row, p }, i) => [
     ...columns.map((c) => prodCell(row, c)),
     Number.isFinite(p) ? Number(p.toFixed(2)) : "",
-    ...(isLycra ? [Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
+    ...(isLycra ? [prodLycraDenierFor(row), Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
   ]);
   const totalRow = columns.map((c, i) => i === 0 ? "Total" : "");
-  totalRow.push(Number(total.toFixed(2)), ...(isLycra ? [Number(lycraTotal.toFixed(2))] : []));
+  totalRow.push(Number(total.toFixed(2)), ...(isLycra ? ["", Number(lycraTotal.toFixed(2))] : []));
   data.push(totalRow);
   const wb = window.XLSX.utils.book_new();
   const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
   const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, feeders: 14, rpm: 10 };
-  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...(isLycra ? [{ wch: 20 }] : [])];
+  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...(isLycra ? [{ wch: 16 }, { wch: 20 }] : [])];
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const prodData = [
     ["Fabric", prodCalc.fabric],
@@ -1300,6 +1355,7 @@ function prodFindColumn(headers, col) {
 // "Total" row of a downloaded file is skipped silently — so a downloaded
 // file can be uploaded again unchanged.
 const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)"];
+const PROD_LYCRA_DENIER_ALIASES = ["lycra denier (d)", "lycra denier", "denier"];
 function prodParseImport(workbook) {
   const sheetName = workbook.SheetNames.includes("Machines") ? "Machines" : workbook.SheetNames[0];
   const ws = workbook.Sheets[sheetName];
@@ -1321,11 +1377,13 @@ function prodParseImport(workbook) {
   const knownLabels = new Set(PROD_IMPORT_COLUMNS.flatMap((c) => [c.label.toLowerCase(), ...c.match]));
   const columns = [];
   const extraCols = [];
+  let denierIdx = -1;
   headers.forEach((h, i) => {
     const col = PROD_IMPORT_COLUMNS.find((c) => colIndex[c.key] === i);
     if (col) { columns.push({ key: col.key, label: col.label }); return; }
     const low = h.toLowerCase();
     if (!low || PROD_COMPUTED_COLUMN_LABELS.includes(low) || knownLabels.has(low)) return;
+    if (PROD_LYCRA_DENIER_ALIASES.includes(low)) { if (denierIdx < 0) denierIdx = i; return; }
     if (extraCols.some((e) => e.label.toLowerCase() === low)) return;
     columns.push({ key: null, label: h });
     extraCols.push({ label: h, index: i });
@@ -1352,7 +1410,8 @@ function prodParseImport(workbook) {
     if (rowProblems.length) { problems.push({ row: sheetRow, message: rowProblems.join("; ") }); continue; }
     const extra = {};
     extraCols.forEach(({ label, index }) => { const v = line[index]; if (v !== "" && v !== null && v !== undefined) extra[label] = v; });
-    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia, gauge: vals.gauge, feeders: vals.feeders, rpm: vals.rpm, ...(Object.keys(extra).length ? { extra } : {}) });
+    const lycraDenier = denierIdx >= 0 ? prodNum(line[denierIdx]) : NaN;
+    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia, gauge: vals.gauge, feeders: vals.feeders, rpm: vals.rpm, ...(Object.keys(extra).length ? { extra } : {}), ...(Number.isFinite(lycraDenier) && lycraDenier > 0 ? { lycraDenier } : {}) });
   }
   return { rows, problems, missing: [], columns };
 }
@@ -1377,7 +1436,7 @@ async function prodHandleUpload(file) {
       return;
     }
     if (!rows.length) {
-      setReport(`<p class="prod-import-error">No valid machine rows found in <b>${prodEsc(file.name)}</b>${problems.length ? ` (${problems.length} row${problems.length === 1 ? "" : "s"} had problems)` : ""}. Please check the file and try again.</p>` + prodProblemsHtml(problems));
+      setReport(`<p class="prod-import-error">No valid machine rows found in <b>${prodEsc(file.name)}</b>${problems.length ? ` (${problems.length} row${problems.length === 1 ? "" : "s"} had problems)` : " — the file has no filled machine rows yet"}. Fill the template (one machine per row, starting at row 2) and upload it again.</p>` + prodProblemsHtml(problems));
       showNotice("Import failed — no valid machine rows found.", "warning");
       return;
     }
@@ -3586,9 +3645,11 @@ $("#prodTableBody")?.addEventListener("click", (event) => {
   renderProdTable();
   renderProdReverse();
 });
-$("#prodLycraDenier")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodLycraDenier").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.lycra) prodCalc.lycra = {}; prodCalc.lycra[prodCalc.fabric] = v; saveProdCalc(); prodUpdateLycra(); } }, 250));
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
+$("#prodDownloadExampleBtn")?.addEventListener("click", prodDownloadExample);
+$("#prodAddFabricClose")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.add("hidden"); });
+$("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.add("hidden"); });
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
 $("#prodUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
 $("#prodDownloadExcelBtn")?.addEventListener("click", prodExportExcel);

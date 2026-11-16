@@ -304,14 +304,17 @@
             <small>The ratio is for your record — the factor stays ×2 because both needle beds knit.</small>
           </div>
           <div class="prod-calc-add hidden" id="prodAddFabricPanel">
+            <button type="button" class="prod-panel-close" id="prodAddFabricClose" title="Close">×</button>
             <input id="prodNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
             <button class="primary" id="prodAddFabricBtn" type="button">Add Fabric Calculation</button>
             <small>Added fabrics use the same standard circular-knitting formula, with production factor ×1 unless you change it.</small>
           </div>
           <div class="prod-calc-input hidden" id="prodInputPanel">
-            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below. You can add your own columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file.</p>
+            <button type="button" class="prod-panel-close" id="prodInputClose" title="Close">×</button>
+            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here — or download the filled example and upload it as it is to see how it works. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below. You can add your own columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file.</p>
             <div class="prod-input-actions">
               <button class="secondary" id="prodDownloadTemplateBtn" type="button">Download Template</button>
+              <button class="secondary" id="prodDownloadExampleBtn" type="button">Download Example</button>
               <button class="primary" id="prodUploadBtn" type="button">Upload Excel</button>
               <input type="file" id="prodUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
               <button class="secondary" id="prodDownloadExcelBtn" type="button">Download Excel</button>
@@ -332,13 +335,7 @@
             <button class="secondary" id="prodAddMachine" type="button">+ Add Machine</button>
             <button class="secondary" id="prodReset" type="button">Reset to Sample</button>
             <span class="prod-total">Total Production / Shift: <b id="prodTotal">0 kg</b></span>
-          </div>
-          <div class="prod-lycra-row hidden" id="prodLycraRow">
-            <label>Lycra denier (D)<input id="prodLycraDenier" type="number" min="1" step="1" value="40"></label>
-            <span class="prod-lycra-info">Lycra count: <b id="prodLycraCount">—</b></span>
-            <span class="prod-lycra-info">Lycra production / Shift: <b id="prodLycraProduction">—</b></span>
-            <span class="prod-lycra-info">Total with lycra: <b id="prodLycraTotal">—</b></span>
-            <small>Lycra uses the same machine settings and stitch length; count = 5315 ÷ denier.</small>
+            <span class="prod-total hidden" id="prodLycraTotals">Lycra production / Shift: <b id="prodLycraProductionTotal">0 kg</b> · Total with lycra: <b id="prodLycraTotal">0 kg</b></span>
           </div>
           <div class="summary-cards prod-reverse">
             <div>

@@ -425,7 +425,7 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-calc-filter-row label{display:grid;gap:4px;color:#52616e;font-size:9px;font-weight:600}
 .prod-calc-filter-row select,.prod-calc-filter-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:150px}
 .prod-calc-filter-row button{height:34px}
-.prod-calc-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.prod-calc-add{position:relative;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;padding-right:36px}
 .prod-calc-factor-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:12px}
 .prod-calc-factor-row label{display:grid;gap:4px;color:#52616e;font-size:9px;font-weight:600}
 .prod-calc-factor-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:80px}
@@ -435,14 +435,15 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-quick-add{display:flex;gap:6px;align-items:center;font-size:9px;color:var(--muted)}
 .prod-quick-add button{height:26px;border:1px solid var(--blue);background:#fff;color:var(--blue);border-radius:3px;padding:0 10px;cursor:pointer}
 .prod-calc-notice{margin-top:12px;padding:11px 13px;background:#fff8e1;border:1px solid #eadbaa;color:#755d29;font-size:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.prod-lycra-row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:0 0 12px;padding:11px 13px;border:1px solid #dfe5ea;background:#fbfcfd;border-radius:4px}
-.prod-lycra-row label{display:grid;gap:4px;color:#52616e;font-size:9px;font-weight:600}
-.prod-lycra-row input{height:34px;border:1px solid #a8b3bd;padding:0 9px;font-size:11px;min-width:80px}
-.prod-lycra-info{font-size:10px;color:#52616e}
-.prod-lycra-info b{color:#111}
-.prod-lycra-row small{color:var(--muted);font-size:9px}
-.prod-calc-input{margin-top:12px;padding:12px;border:1px solid #dfe5ea;background:#fbfcfd;border-radius:4px}
-.prod-calc-input p{font-size:10px;color:#52616e;margin:0 0 10px;line-height:1.5}
+.prod-lycra-table-row td{background:#f0f7ff}
+.prod-lycra-table-row input{width:96px;height:30px;border:1px solid #a8b3bd;padding:0 8px;font-size:10px}
+.prod-lycra-label{font-size:10px;color:var(--deep);font-weight:600;white-space:nowrap}
+.prod-lycra-mirror{font-size:10px;color:#52616e}
+.prod-lycra-count{font-size:9px;color:var(--muted);margin-top:2px;white-space:nowrap}
+.prod-panel-close{position:absolute;top:6px;right:8px;border:0;background:transparent;font-size:16px;line-height:1;color:#52616e;cursor:pointer;padding:2px 6px}
+.prod-panel-close:hover{color:#111}
+.prod-calc-input{position:relative;margin-top:12px;padding:12px;border:1px solid #dfe5ea;background:#fbfcfd;border-radius:4px}
+.prod-calc-input p{font-size:10px;color:#52616e;margin:0 0 10px;line-height:1.5;padding-right:24px}
 .prod-input-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #prodImportReport p{font-size:10px;margin:8px 0 0;line-height:1.5}
 .prod-import-ok{color:#1e7a34}
