@@ -931,6 +931,7 @@ function prodDefaultState() {
     factors: {},
     ratios: {},
     lycra: {},
+    columns: {},
     rows: Object.fromEntries(PROD_BUILTIN_FABRICS.map((name) => [name, [{ ...PROD_SAMPLE_ROW }]])),
   };
 }
@@ -945,6 +946,7 @@ function loadProdCalc() {
     merged.factors = { ...(parsed.factors || {}) };
     merged.ratios = { ...(parsed.ratios || {}) };
     merged.lycra = { ...(parsed.lycra || {}) };
+    merged.columns = { ...(parsed.columns || {}) };
     PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     return merged;
@@ -960,6 +962,24 @@ function prodEsc(value) {
 }
 function prodAvailableFabrics() { return [...PROD_BUILTIN_FABRICS, ...prodCalc.addedFabrics]; }
 function prodRows() { return prodCalc.rows[prodCalc.fabric] || []; }
+// Extra columns: the user can add any columns of their own to the uploaded
+// Excel file (for example Color, Balancer Qty, Operator Name). They have no
+// effect on the calculation — they are kept as they are and returned in the
+// downloaded Excel file, in the same order they were uploaded. prodColumns()
+// is the full column layout for the current fabric: the 7 input columns
+// plus any extra columns, in upload order.
+function prodDefaultColumns() {
+  return PROD_IMPORT_COLUMNS.map((c) => ({ key: c.key, label: c.label }));
+}
+function prodColumns() {
+  const stored = prodCalc.columns && prodCalc.columns[prodCalc.fabric];
+  if (Array.isArray(stored)) {
+    const keys = stored.map((c) => c && c.key).filter(Boolean);
+    if (PROD_IMPORT_COLUMNS.every((c) => keys.includes(c.key))) return stored;
+  }
+  return prodDefaultColumns();
+}
+
 function prodNum(value) { const n = parseFloat(value); return Number.isFinite(n) ? n : NaN; }
 function prodFactor() {
   const saved = prodCalc.factors && prodCalc.factors[prodCalc.fabric];
@@ -1085,18 +1105,19 @@ function renderProductionCalculation() {
   }
 }
 function renderProdTable() {
+  const headRow = $("#prodTableHeadRow");
+  if (headRow) headRow.innerHTML = prodColumns().map((c) => `<th>${prodEsc(c.label)}</th>`).join("") + `<th>Production / Shift (kg)</th><th></th>`;
   const body = $("#prodTableBody");
   if (!body) return;
   const rows = prodRows();
+  const columns = prodColumns();
   body.innerHTML = rows.map((row, i) => `
     <tr data-row="${i}">
-      <td><input data-field="machine" value="${prodEsc(row.machine ?? "")}" inputmode="numeric"></td>
-      <td><input data-field="count" type="number" min="0" step="any" value="${prodEsc(row.count ?? "")}"></td>
-      <td><input data-field="stitchLength" type="number" min="0" step="any" value="${prodEsc(row.stitchLength ?? "")}"></td>
-      <td><input data-field="dia" type="number" min="0" step="any" value="${prodEsc(row.dia ?? "")}"></td>
-      <td><input data-field="gauge" type="number" min="0" step="any" value="${prodEsc(row.gauge ?? "")}"></td>
-      <td><input data-field="feeders" type="number" min="0" step="1" value="${prodEsc(row.feeders ?? "")}"></td>
-      <td><input data-field="rpm" type="number" min="0" step="any" value="${prodEsc(row.rpm ?? "")}"></td>
+      ${columns.map((c) => {
+        if (c.key === "machine") return `<td><input data-field="machine" value="${prodEsc(row.machine ?? "")}" inputmode="numeric"></td>`;
+        if (c.key) return `<td><input data-field="${c.key}" type="number" min="0" step="${c.key === "feeders" ? "1" : "any"}" value="${prodEsc(row[c.key] ?? "")}"></td>`;
+        return `<td><input data-field="extra" data-extra="${prodEsc(c.label)}" value="${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}"></td>`;
+      }).join("")}
       <td class="prod-result" data-result="${i}">${prodKg(prodProductionPerShift(row))}</td>
       <td><button type="button" class="secondary prod-remove-row" data-row="${i}" title="Remove machine">✕</button></td>
     </tr>`).join("");
@@ -1171,8 +1192,11 @@ function prodAddFabric(name) {
 
 // ---- Production Calculation: bulk Excel import / export ("Input Name") ----
 // Uses the vendored SheetJS (window.XLSX), loaded on the web and in the
-// desktop app. The template has the 7 input columns; the export adds a
-// "Production / Shift (kg)" column plus a separate "Production" sheet.
+// desktop app. The template has the 7 input columns; the user can add any
+// extra columns of their own (Color, Balancer Qty, Operator Name, ...).
+// Extra columns have no effect on the calculation — they are kept and
+// returned in the export, in the same order they were uploaded. The export
+// adds a "Production / Shift (kg)" column plus a separate "Production" sheet.
 const PROD_IMPORT_COLUMNS = [
   { key: "machine", label: "M/C No", match: ["m/c no", "machine", "m/c", "mc no", "m/c no."] },
   { key: "count", label: "Yarn Count (Ne)", match: ["yarn count (ne)", "yarn count", "count", "count ne", "count (ne)"] },
@@ -1207,6 +1231,7 @@ function prodDownloadTemplate() {
     ["M/C No can be a number or a name."],
     ["All other columns must be numbers greater than 0."],
     ["Production / Shift (kg) is calculated by ZBOM when you upload — do not add it."],
+    ["You can add your own columns after these 7 (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file."],
     ["Save the file, then upload it with the Upload button in Production Calculation."],
   ]);
   readme["!cols"] = [{ wch: 95 }];
@@ -1223,17 +1248,24 @@ function prodExportExcel() {
   const isLycra = prodCalc.fabric.includes("Lycra");
   const lycraValues = isLycra ? values.map(({ row }) => prodLycraPerShift(row)) : [];
   const lycraTotal = lycraValues.reduce((s, v) => s + (v || 0), 0);
-  const header = [...PROD_IMPORT_COLUMNS.map((c) => c.label), "Production / Shift (kg)", ...(isLycra ? ["Lycra Production (kg)"] : [])];
+  // The export keeps the columns exactly as they were uploaded — the 7
+  // input columns plus any extra columns the user added, in the same
+  // order — then the calculated Production column(s).
+  const columns = prodColumns();
+  const prodCell = (row, c) => c.key === "machine" ? (row.machine ?? "") : c.key ? prodNum(row[c.key]) : (row.extra && row.extra[c.label] != null ? row.extra[c.label] : "");
+  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...(isLycra ? ["Lycra Production (kg)"] : [])];
   const data = values.map(({ row, p }, i) => [
-    row.machine ?? "", prodNum(row.count), prodNum(row.stitchLength), prodNum(row.dia),
-    prodNum(row.gauge), prodNum(row.feeders), prodNum(row.rpm),
+    ...columns.map((c) => prodCell(row, c)),
     Number.isFinite(p) ? Number(p.toFixed(2)) : "",
     ...(isLycra ? [Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
   ]);
-  data.push(["Total", "", "", "", "", "", "", Number(total.toFixed(2)), ...(isLycra ? [Number(lycraTotal.toFixed(2))] : [])]);
+  const totalRow = columns.map((c, i) => i === 0 ? "Total" : "");
+  totalRow.push(Number(total.toFixed(2)), ...(isLycra ? [Number(lycraTotal.toFixed(2))] : []));
+  data.push(totalRow);
   const wb = window.XLSX.utils.book_new();
   const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
-  ws["!cols"] = [12, 16, 18, 12, 10, 14, 10, 22, ...(isLycra ? [20] : [])].map((wch) => ({ wch }));
+  const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, feeders: 14, rpm: 10 };
+  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...(isLycra ? [{ wch: 20 }] : [])];
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const prodData = [
     ["Fabric", prodCalc.fabric],
@@ -1263,12 +1295,17 @@ function prodFindColumn(headers, col) {
   }
   return -1;
 }
+// Columns ZBOM itself calculates and writes ("Production / Shift (kg)",
+// "Lycra Production (kg)") are never treated as extra columns, and the
+// "Total" row of a downloaded file is skipped silently — so a downloaded
+// file can be uploaded again unchanged.
+const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)"];
 function prodParseImport(workbook) {
   const sheetName = workbook.SheetNames.includes("Machines") ? "Machines" : workbook.SheetNames[0];
   const ws = workbook.Sheets[sheetName];
-  if (!ws) return { rows: [], problems: [], missing: ["the file has no sheets"] };
+  if (!ws) return { rows: [], problems: [], missing: ["the file has no sheets"], columns: [] };
   const aoa = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
-  if (!aoa.length) return { rows: [], problems: [], missing: ["the sheet is empty"] };
+  if (!aoa.length) return { rows: [], problems: [], missing: ["the sheet is empty"], columns: [] };
   const headers = aoa[0].map((h) => String(h ?? "").trim());
   const colIndex = {};
   const missing = [];
@@ -1276,7 +1313,23 @@ function prodParseImport(workbook) {
     const i = prodFindColumn(headers, col);
     if (i < 0) missing.push(col.label); else colIndex[col.key] = i;
   });
-  if (missing.length) return { rows: [], problems: [], missing };
+  if (missing.length) return { rows: [], problems: [], missing, columns: [] };
+  // The full column layout, in the order it was uploaded: the 7 input
+  // columns (canonical labels) plus any extra columns the user added
+  // (their own header text). Extra columns are never validated and have
+  // no effect on the calculation — they are kept and returned on export.
+  const knownLabels = new Set(PROD_IMPORT_COLUMNS.flatMap((c) => [c.label.toLowerCase(), ...c.match]));
+  const columns = [];
+  const extraCols = [];
+  headers.forEach((h, i) => {
+    const col = PROD_IMPORT_COLUMNS.find((c) => colIndex[c.key] === i);
+    if (col) { columns.push({ key: col.key, label: col.label }); return; }
+    const low = h.toLowerCase();
+    if (!low || PROD_COMPUTED_COLUMN_LABELS.includes(low) || knownLabels.has(low)) return;
+    if (extraCols.some((e) => e.label.toLowerCase() === low)) return;
+    columns.push({ key: null, label: h });
+    extraCols.push({ label: h, index: i });
+  });
   const rows = [], problems = [];
   for (let r = 1; r < aoa.length; r++) {
     const line = aoa[r];
@@ -1293,10 +1346,15 @@ function prodParseImport(workbook) {
       if (!Number.isFinite(v) || v <= 0) rowProblems.push(`${label} must be a number greater than 0`);
       else vals[key] = v;
     });
+    // The Total row of a file ZBOM downloaded is not a machine.
+    if (rowProblems.length && String(machine ?? "").trim().toLowerCase() === "total"
+      && ["count", "stitchLength", "dia", "gauge", "feeders", "rpm"].every((key) => { const v = get(key); return v === "" || v === null || v === undefined; })) continue;
     if (rowProblems.length) { problems.push({ row: sheetRow, message: rowProblems.join("; ") }); continue; }
-    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia, gauge: vals.gauge, feeders: vals.feeders, rpm: vals.rpm });
+    const extra = {};
+    extraCols.forEach(({ label, index }) => { const v = line[index]; if (v !== "" && v !== null && v !== undefined) extra[label] = v; });
+    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia, gauge: vals.gauge, feeders: vals.feeders, rpm: vals.rpm, ...(Object.keys(extra).length ? { extra } : {}) });
   }
-  return { rows, problems, missing: [] };
+  return { rows, problems, missing: [], columns };
 }
 function prodProblemsHtml(problems) {
   if (!problems.length) return "";
@@ -1312,7 +1370,7 @@ async function prodHandleUpload(file) {
   try {
     const buf = await file.arrayBuffer();
     const wb = window.XLSX.read(buf, { type: "array" });
-    const { rows, problems, missing } = prodParseImport(wb);
+    const { rows, problems, missing, columns } = prodParseImport(wb);
     if (missing.length) {
       setReport(`<p class="prod-import-error">Could not import <b>${prodEsc(file.name)}</b> — missing column${missing.length === 1 ? "" : "s"}: ${missing.map(prodEsc).join(", ")}. Please use the downloaded template.</p>`);
       showNotice("Import failed — a required column is missing. See the Input Name panel.", "warning");
@@ -1324,10 +1382,13 @@ async function prodHandleUpload(file) {
       return;
     }
     prodCalc.rows[prodCalc.fabric] = rows;
+    if (!prodCalc.columns) prodCalc.columns = {};
+    prodCalc.columns[prodCalc.fabric] = columns;
     saveProdCalc();
     renderProdTable();
     renderProdReverse();
-    const ok = `<p class="prod-import-ok">Imported <b>${rows.length}</b> machine${rows.length === 1 ? "" : "s"} into <b>${prodEsc(prodCalc.fabric)}</b> from <b>${prodEsc(file.name)}</b>.</p>`;
+    const extraNames = (columns || []).filter((c) => !c.key).map((c) => c.label);
+    const ok = `<p class="prod-import-ok">Imported <b>${rows.length}</b> machine${rows.length === 1 ? "" : "s"} into <b>${prodEsc(prodCalc.fabric)}</b> from <b>${prodEsc(file.name)}</b>${extraNames.length ? ` — kept ${extraNames.length} extra column${extraNames.length === 1 ? "" : "s"} (${extraNames.map(prodEsc).join(", ")}), they will be returned in the download.` : "."}</p>`;
     const bad = problems.length
       ? `<p class="prod-import-warn">${problems.length} row${problems.length === 1 ? "" : "s"} had problems and were skipped:</p>` + prodProblemsHtml(problems)
       : `<p class="prod-import-ok">All rows were valid.</p>`;
@@ -3505,7 +3566,12 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   const tr = input.closest("tr[data-row]");
   const row = prodRows()[Number(tr?.dataset.row)];
   if (!row) return;
-  row[input.dataset.field] = input.value;
+  if (input.dataset.field === "extra") {
+    if (!row.extra) row.extra = {};
+    row.extra[input.dataset.extra] = input.value;
+  } else {
+    row[input.dataset.field] = input.value;
+  }
   saveProdCalc();
   prodRecalcRow(Number(tr.dataset.row));
   if (input.dataset.field === "machine") renderProdReverse();

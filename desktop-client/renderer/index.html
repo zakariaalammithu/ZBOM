@@ -309,7 +309,7 @@
             <small>Added fabrics use the same standard circular-knitting formula, with production factor ×1 unless you change it.</small>
           </div>
           <div class="prod-calc-input hidden" id="prodInputPanel">
-            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below.</p>
+            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below. You can add your own columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file.</p>
             <div class="prod-input-actions">
               <button class="secondary" id="prodDownloadTemplateBtn" type="button">Download Template</button>
               <button class="primary" id="prodUploadBtn" type="button">Upload Excel</button>
@@ -324,7 +324,7 @@
           <div class="table-card">
             <div class="table-meta"><b id="prodMatches">1 machine</b><span>Production is calculated live as you type</span></div>
             <div class="table-scroll"><table id="prodTable">
-              <thead><tr><th>M/C No</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Dia (inch)</th><th>Gauge</th><th>No of Feeder</th><th>RPM</th><th>Production / Shift (kg)</th><th></th></tr></thead>
+              <thead><tr id="prodTableHeadRow"><th>M/C No</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Dia (inch)</th><th>Gauge</th><th>No of Feeder</th><th>RPM</th><th>Production / Shift (kg)</th><th></th></tr></thead>
               <tbody id="prodTableBody"></tbody>
             </table></div>
           </div>
