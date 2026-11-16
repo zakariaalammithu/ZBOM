@@ -1291,6 +1291,19 @@ function fleeceCopyTable() {
     fleeceCopyFallback(text, done, fail);
   }
 }
+function fleeceCopyPct() {
+  const data = fleeceCurrentData();
+  if (!data) return;
+  const text = fleeceCompute(data).map((r) => fleeceFmt(r.share, 2)).join("\n");
+  const note = $("#fleeceCopyNote");
+  const done = () => { if (note) { note.textContent = "Yarn % copied — paste into Excel or SAP."; setTimeout(() => { note.textContent = ""; }, 3000); } };
+  const fail = () => { if (note) note.textContent = "Copy did not work — select the Yarn % cells and press Ctrl+C."; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => fleeceCopyFallback(text, done, fail));
+  } else {
+    fleeceCopyFallback(text, done, fail);
+  }
+}
 function fleeceCopyFallback(text, done, fail) {
   try {
     const ta = document.createElement("textarea");
@@ -3245,6 +3258,7 @@ $("#fleeceAddFabricToggle")?.addEventListener("click", () => $("#fleeceAddFabric
 $("#fleeceAddFabricBtn")?.addEventListener("click", () => { fleeceAddFabric($("#fleeceNewFabricName")?.value); const input = $("#fleeceNewFabricName"); if (input) input.value = ""; });
 $$("#fleeceAddFabricPanel [data-add-fabric]").forEach((btn) => btn.addEventListener("click", () => fleeceAddFabric(btn.dataset.addFabric)));
 $("#fleeceCopyBtn")?.addEventListener("click", fleeceCopyTable);
+  $("#fleeceCopyPctBtn")?.addEventListener("click", fleeceCopyPct);
 $("#fleeceAddYarn")?.addEventListener("click", fleeceAddYarn);
 $("#fleeceFabricQty")?.addEventListener("input", (event) => {
   const data = fleeceCurrentData();
