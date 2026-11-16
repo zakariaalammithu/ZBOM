@@ -3656,6 +3656,17 @@ $("#prodTableBody")?.addEventListener("click", (event) => {
   renderProdTable();
   renderProdReverse();
 });
+$("#prodKeepFirst")?.addEventListener("click", () => {
+  const rows = prodRows();
+  if (rows.length <= 1) { showNotice("There is only one machine.", "info"); return; }
+  const removed = rows.length - 1;
+  if (!window.confirm(`Keep only the first machine and delete the other ${removed} machine${removed === 1 ? "" : "s"}?`)) return;
+  rows.splice(1);
+  saveProdCalc();
+  renderProdTable();
+  renderProdReverse();
+  showNotice(`Kept only the first machine — deleted ${removed} machine${removed === 1 ? "" : "s"}.`, "success");
+});
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
 $("#prodDownloadExampleBtn")?.addEventListener("click", prodDownloadExample);
