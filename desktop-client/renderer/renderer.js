@@ -1678,6 +1678,7 @@ const FLEECE_BUILTIN_TYPES = [
   { value: "plaited", label: "Plaited Fabric" },
   { value: "lycraFleece", label: "Lycra Fleece" },
   { value: "design", label: "Design" },
+  { value: "lycraDesign", label: "Lycra Design" },
 ];
 const FLEECE_TYPE_SUBTITLES = {
   twoThread: "Plain + Loop — cotton and polyester.",
@@ -1692,6 +1693,7 @@ const FLEECE_TYPE_SUBTITLES = {
   plaited: "Two yarns plated together — Face + Back, one yarn on each side.",
   lycraFleece: "Three-thread fleece with lycra — Face + Filament Binder + Back + Lycra.",
   design: "Plated rib design — Face + Back, two yarns plated together.",
+  lycraDesign: "Plated rib design with lycra — Face + Back + Lycra, three yarns plated together.",
 };
 const FLEECE_SUGGESTED_FABRICS = ["Interlock"];
 const FLEECE_MAX_YARNS = 8;
@@ -1720,6 +1722,7 @@ const FLEECE_LEGACY_YARN_LABELS = {
   plaited: ["30/1 CC", "30/1 CC"],
   lycraFleece: ["24/1", "75D/36 Poly", "10/1", "40D Lycra"],
   design: ["28/1", "50D/36 FILA (NIM)"],
+  lycraDesign: ["28/1", "50D/36 FILA (NIM)", "40D Lycra"],
 };
 // The file labels these descriptions replaced (2026-11-17 and before).
 // A saved row still carrying one of them is blanked on load, so the
@@ -1800,6 +1803,11 @@ function fleeceBuiltinDefaults() {
     design: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Back", yarn: "", kind: "Denier", denier: 50, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
+    ]},
+    lycraDesign: { fabricQty: 100, lycraFactor: null, yarns: [
+      { label: "Face", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Back", yarn: "", kind: "Denier", denier: 50, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
   };
 }
