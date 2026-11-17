@@ -485,6 +485,7 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .fleece-yarn-table input:focus{border-color:var(--blue);outline:0;box-shadow:0 0 0 1px var(--blue)}
 .fleece-num{font-weight:600;color:var(--deep)}
 .fleece-readonly-count{display:inline-block;min-width:60px;padding:6px 8px;background:#f2f2f2;color:#6a6d70;font-weight:600}
+.fleece-lycra-count{font-size:9px;color:var(--muted);margin-top:2px;white-space:nowrap}
 .fleece-qty-label{display:flex;gap:6px;align-items:center;font-size:10px;color:#52616e;font-weight:600}
 .fleece-qty-label input{height:32px;border:1px solid #a8b3bd;padding:0 8px;font-size:11px;background:#fff8cc;width:110px}
 .fleece-lycra{display:flex;gap:6px;align-items:center;font-size:10px;color:#52616e;font-weight:600}

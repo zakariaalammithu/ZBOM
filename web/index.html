@@ -392,7 +392,6 @@
           <div class="fleece-custom-actions">
             <button class="secondary" id="fleeceAddYarn" type="button">+ Add Yarn</button>
             <label class="fleece-qty-label">Fabric Qty <input id="fleeceFabricQty" type="number" min="0" step="any" value="23"></label>
-            <span class="fleece-lycra hidden" id="fleeceLycraWrap">Lycra factor <input id="fleeceLycraFactor" type="number" min="0" step="any" value="60"> <small>Count = 7315 ÷ factor</small></span>
           </div>
           <div class="fleece-summary">
             <h4>Yarn Calculation</h4>
@@ -404,7 +403,7 @@
             <div class="fleece-summary-actions"><button class="secondary" id="fleeceCopyBtn" type="button">Copy table</button><button class="secondary" id="fleeceCopyPctBtn" type="button">Copy Yarn %</button><span class="fleece-copy-note" id="fleeceCopyNote"></span></div>
           </div>
         </div>
-        <p class="prod-formula">Ratio = Stitch Length × Feeder ÷ Yarn Count &nbsp;·&nbsp; For denier yarns, Ratio = Denier × Feeder × Stitch Length ÷ 5315 &nbsp;·&nbsp; For Lycra, Yarn Count = 7315 ÷ factor &nbsp;·&nbsp; Consuming % = Ratio ÷ Σ Ratio × 100 &nbsp;·&nbsp; Yarn Qty = Fabric Qty × Consuming % &nbsp;·&nbsp; Individual composition = Consuming % × yarn composition.</p>
+        <p class="prod-formula">Ratio = Stitch Length × Feeder ÷ Yarn Count &nbsp;·&nbsp; For denier yarns, Ratio = Denier × Feeder × Stitch Length ÷ 5315 &nbsp;·&nbsp; For Lycra, Yarn Count = 5315 ÷ Denier &nbsp;·&nbsp; Consuming % = Ratio ÷ Σ Ratio × 100 &nbsp;·&nbsp; Yarn Qty = Fabric Qty × Consuming % &nbsp;·&nbsp; Individual composition = Consuming % × yarn composition.</p>
       </section>
 
       <section class="view" id="department">
