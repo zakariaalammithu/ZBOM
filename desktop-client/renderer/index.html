@@ -400,7 +400,7 @@
               <tbody id="fleeceSummaryBody"></tbody>
               <tfoot><tr><td></td><td>Total</td><td id="fleeceSummaryTotal">100</td></tr></tfoot>
             </table>
-            <div class="fleece-summary-actions"><button class="secondary" id="fleeceCopyBtn" type="button">Copy table</button><button class="secondary" id="fleeceCopyPctBtn" type="button">Copy Yarn %</button><span class="fleece-copy-note" id="fleeceCopyNote"></span></div>
+            <div class="fleece-summary-actions"><button class="secondary" id="fleeceCopyBtn" type="button">Copy table</button><button class="secondary" id="fleeceCopyPctBtn" type="button">Copy Yarn %</button><button class="secondary" id="fleecePrintBtn" type="button">Print</button><button class="secondary" id="fleeceDownloadReportBtn" type="button">Download PDF</button><span class="fleece-copy-note" id="fleeceCopyNote"></span></div>
           </div>
         </div>
         <p class="prod-formula">Ratio = Stitch Length × Feeder ÷ Yarn Count &nbsp;·&nbsp; For denier yarns, Ratio = Denier × Feeder × Stitch Length ÷ 5315 &nbsp;·&nbsp; For Lycra, Yarn Count = 5315 ÷ Denier &nbsp;·&nbsp; Consuming % = Ratio ÷ Σ Ratio × 100 &nbsp;·&nbsp; Yarn Qty = Fabric Qty × Consuming % &nbsp;·&nbsp; Individual composition = Consuming % × yarn composition.</p>
@@ -615,6 +615,9 @@
     }
   </script>
   <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="renderer.js"></script>
+  <div id="fleecePrintReport" class="fleece-print-report" aria-hidden="true"></div>
 </body>
 </html>
