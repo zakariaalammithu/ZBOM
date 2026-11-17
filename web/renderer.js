@@ -1699,29 +1699,50 @@ const FLEECE_SAMPLE_YARNS = [
   { label: "Yarn-2", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 3.85 },
   { label: "Yarn-3", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.95 },
 ];
+// Yarn labels that shipped before the Yarn column was made blank by
+// default (2026-11-17). A saved row still carrying its old default label
+// is blanked on load (anything the user typed stays), and the old label
+// shows lightly as the input's placeholder until the user types. Rows
+// with no file label (Fleece, Two Thread Fleece, French Terry, Terry
+// Velour, Plaited) show their yarn count lightly instead, so every
+// fabric has a light hint in the Yarn column.
+// (Declared before `fleeceCalc` loads, so the migration can use it.)
+const FLEECE_LEGACY_YARN_LABELS = {
+  twoThread: ["40/1 CB", "50D Poly"],
+  twoThreadNoPoly: ["40", "75", "40D"],
+  threeThreadPoly: ["26/1 Ring KH CVC", "75D Poly", "10/1 Kh"],
+  fourThread: ["30/1 CB", "34/1 PV", "10/1 CD", "70D Lycra"],
+  threeThreadFleece: [null, "75D Poly", null],
+  lycraFleece: [null, "75D Poly", null, "40D Lycra"],
+};
+function fleeceYarnPlaceholder(y, i, data) {
+  const legacy = FLEECE_LEGACY_YARN_LABELS[fleeceCalc.type];
+  const hint = (legacy && legacy[i]) || fleeceYarnLabel(y, data);
+  return hint && hint !== "—" ? ` placeholder="${fleeceEsc(hint)}"` : "";
+}
 let fleeceCalc = loadFleeceCalc();
 
 function fleeceBuiltinDefaults() {
   return {
     twoThread: { fabricQty: 23, lycraFactor: null, yarns: [
-      { label: "Plain (Ne)", yarn: "40/1 CB", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
-      { label: "Loop (Ne)", yarn: "50D Poly", kind: "Ne", count: 46, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 0.9 },
+      { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
+      { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 46, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 0.9 },
     ]},
     twoThreadNoPoly: { fabricQty: 325, lycraFactor: null, yarns: [
-      { label: "Plain (Ne)", yarn: "40", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.35 },
-      { label: "Binding (Ne)", yarn: "75", kind: "Ne", count: 75, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
-      { label: "Loop", yarn: "40D", kind: "Denier", denier: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 0.6 },
+      { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.35 },
+      { label: "Binding (Ne)", yarn: "", kind: "Ne", count: 75, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
+      { label: "Loop", yarn: "", kind: "Denier", denier: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 0.6 },
     ]},
     threeThreadPoly: { fabricQty: 1000, lycraFactor: null, yarns: [
-      { label: "Plain (Ne)", yarn: "26/1 Ring KH CVC", kind: "Ne", count: 26, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.55 },
-      { label: "Binding (ND)", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 1.35 },
-      { label: "Loop (Ne)", yarn: "10/1 Kh", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.45 },
+      { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 26, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.55 },
+      { label: "Binding (ND)", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 1.35 },
+      { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.45 },
     ]},
     fourThread: { fabricQty: 3000, lycraFactor: 60, yarns: [
-      { label: "Yarn-1", yarn: "30/1 CB", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.5 },
-      { label: "Yarn-2", yarn: "34/1 PV", kind: "Ne", count: 34, cotton: 60, poly: 40, others: 0, feeder: 1, sl: 3.5 },
-      { label: "Yarn-3", yarn: "10/1 CD", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.1 },
-      { label: "Yarn-4 (Lycra)", yarn: "70D Lycra", kind: "Lycra", denier: 70, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
+      { label: "Yarn-1", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.5 },
+      { label: "Yarn-2", yarn: "", kind: "Ne", count: 34, cotton: 60, poly: 40, others: 0, feeder: 1, sl: 3.5 },
+      { label: "Yarn-3", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.1 },
+      { label: "Yarn-4 (Lycra)", yarn: "", kind: "Lycra", denier: 70, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
     fleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.9 },
@@ -1734,7 +1755,7 @@ function fleeceBuiltinDefaults() {
     ]},
     threeThreadFleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
-      { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
+      { label: "Binder — Filament", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
     ]},
     frenchTerry: { fabricQty: 100, lycraFactor: null, yarns: [
@@ -1751,9 +1772,9 @@ function fleeceBuiltinDefaults() {
     ]},
     lycraFleece: { fabricQty: 100, lycraFactor: 60, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
-      { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
+      { label: "Binder — Filament", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
-      { label: "Lycra", yarn: "40D Lycra", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
+      { label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
   };
 }
@@ -1796,13 +1817,14 @@ function loadFleeceCalc() {
     FLEECE_BUILTIN_TYPES.forEach((t) => {
       if (merged.data[t.value].fabricQty === "") merged.data[t.value].fabricQty = 100;
     });
-    // Saved Yarn labels were blanked when the Yarn column was made blank
-    // by default (2026-11-17) — restore the builtin label for a row whose
-    // yarn is empty; anything the user typed stays.
+    // Saved Yarn labels from before the Yarn column was made blank by
+    // default — blank a row's label only when it still equals the old
+    // default for that row; anything the user typed stays.
     FLEECE_BUILTIN_TYPES.forEach((t) => {
-      const baseYarns = base.data[t.value].yarns;
+      const legacy = FLEECE_LEGACY_YARN_LABELS[t.value];
+      if (!legacy) return;
       merged.data[t.value].yarns.forEach((y, i) => {
-        if (y.yarn === "" && baseYarns[i] && baseYarns[i].yarn) y.yarn = baseYarns[i].yarn;
+        if (legacy[i] && y.yarn === legacy[i]) y.yarn = "";
       });
     });
     merged.addedFabrics = (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !FLEECE_BUILTIN_TYPES.some((t) => t.value === name));
@@ -2152,7 +2174,7 @@ function renderFleeceMain() {
           : `<input data-field="count" type="number" min="0" step="any" value="${fleeceEsc(y.count ?? "")}">`;
       return `<tr data-yarn="${i}">
         <td><input data-field="label" value="${fleeceEsc(y.label ?? "")}"></td>
-        <td><input data-field="yarn" value="${fleeceEsc(y.yarn ?? "")}"></td>
+        <td><input data-field="yarn" value="${fleeceEsc(y.yarn ?? "")}"${fleeceYarnPlaceholder(y, i, data)}></td>
         <td>${countCell}</td>
         <td><input data-field="cotton" type="number" min="0" max="100" step="any" value="${fleeceEsc(y.cotton ?? "")}"></td>
         <td><input data-field="poly" type="number" min="0" max="100" step="any" value="${fleeceEsc(y.poly ?? "")}"></td>
