@@ -1699,15 +1699,29 @@ const FLEECE_SAMPLE_YARNS = [
   { label: "Yarn-2", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 3.85 },
   { label: "Yarn-3", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.95 },
 ];
-// Yarn labels that shipped before the Yarn column was made blank by
-// default (2026-11-17). A saved row still carrying its old default label
-// is blanked on load (anything the user typed stays), and the old label
-// shows lightly as the input's placeholder until the user types. Rows
-// with no file label (Fleece, Two Thread Fleece, French Terry, Terry
-// Velour, Plaited) show their yarn count lightly instead, so every
-// fabric has a light hint in the Yarn column.
+// Yarn descriptions the user wrote in their all-fabrics Excel file
+// (2026-11-17). The Yarn column is blank by default and shows the
+// description lightly as the input's placeholder until the user types.
+// Rows with no description here (custom fabrics) show their yarn
+// count lightly instead, so every fabric has a light hint.
 // (Declared before `fleeceCalc` loads, so the migration can use it.)
 const FLEECE_LEGACY_YARN_LABELS = {
+  twoThread: ["40/1 CC", "75D/36 Poly"],
+  twoThreadNoPoly: ["40/1 CC", "75D/36 Poly", "40D Lycra"],
+  threeThreadPoly: ["26/1 CC", "75D/36 Poly", "10/1 Kh"],
+  fourThread: ["30/1 CB", "34/1 PV", "10/1 CD", "70D Lycra"],
+  fleece: ["30/1 CC", "30/1 CC", "10/1 Kh"],
+  twoThreadFleece: ["8/1 CC", "10/1 CC"],
+  threeThreadFleece: ["24/1 CC", "75D/36 Poly", "10/1 CC"],
+  frenchTerry: ["24/1 CC", "20/1 CC"],
+  terryVelour: ["30/1 CC", "20/1 CC"],
+  plaited: ["30/1 CC", "30/1 CC"],
+  lycraFleece: ["24/1", "75D/36 Poly", "10/1", "40D Lycra"],
+};
+// The file labels these descriptions replaced (2026-11-17 and before).
+// A saved row still carrying one of them is blanked on load, so the
+// new description shows lightly instead.
+const FLEECE_OLD_YARN_LABELS = {
   twoThread: ["40/1 CB", "50D Poly"],
   twoThreadNoPoly: ["40", "75", "40D"],
   threeThreadPoly: ["26/1 Ring KH CVC", "75D Poly", "10/1 Kh"],
@@ -1715,6 +1729,10 @@ const FLEECE_LEGACY_YARN_LABELS = {
   threeThreadFleece: [null, "75D Poly", null],
   lycraFleece: [null, "75D Poly", null, "40D Lycra"],
 };
+// The four file types used to default to their file quantities.
+// A saved qty that still equals the old file quantity is reset to
+// 100 KG on load (the new default for every fabric).
+const FLEECE_OLD_FABRIC_QTY = { twoThread: 23, twoThreadNoPoly: 325, threeThreadPoly: 1000, fourThread: 3000 };
 function fleeceYarnPlaceholder(y, i, data) {
   const legacy = FLEECE_LEGACY_YARN_LABELS[fleeceCalc.type];
   const hint = (legacy && legacy[i]) || fleeceYarnLabel(y, data);
@@ -1724,21 +1742,21 @@ let fleeceCalc = loadFleeceCalc();
 
 function fleeceBuiltinDefaults() {
   return {
-    twoThread: { fabricQty: 23, lycraFactor: null, yarns: [
+    twoThread: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
       { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 46, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 0.9 },
     ]},
-    twoThreadNoPoly: { fabricQty: 325, lycraFactor: null, yarns: [
+    twoThreadNoPoly: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.35 },
       { label: "Binding (Ne)", yarn: "", kind: "Ne", count: 75, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
       { label: "Loop", yarn: "", kind: "Denier", denier: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 0.6 },
     ]},
-    threeThreadPoly: { fabricQty: 1000, lycraFactor: null, yarns: [
+    threeThreadPoly: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 26, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.55 },
       { label: "Binding (ND)", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 1.35 },
       { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.45 },
     ]},
-    fourThread: { fabricQty: 3000, lycraFactor: 60, yarns: [
+    fourThread: { fabricQty: 100, lycraFactor: 60, yarns: [
       { label: "Yarn-1", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.5 },
       { label: "Yarn-2", yarn: "", kind: "Ne", count: 34, cotton: 60, poly: 40, others: 0, feeder: 1, sl: 3.5 },
       { label: "Yarn-3", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.1 },
@@ -1813,18 +1831,26 @@ function loadFleeceCalc() {
       });
     });
     // An empty Fabric Qty means "never set" — default it to 100 KG so the
-    // Yarn Qty column shows values (the four file types keep their own qty).
+    // Yarn Qty column shows values.
     FLEECE_BUILTIN_TYPES.forEach((t) => {
       if (merged.data[t.value].fabricQty === "") merged.data[t.value].fabricQty = 100;
     });
-    // Saved Yarn labels from before the Yarn column was made blank by
-    // default — blank a row's label only when it still equals the old
-    // default for that row; anything the user typed stays.
+    // The four file types used to default to their file quantities
+    // (23 / 325 / 1000 / 3000); the user wants 100 KG by default in
+    // every fabric — reset a saved qty that still equals the old file
+    // quantity; anything the user typed stays.
+    FLEECE_BUILTIN_TYPES.forEach((t) => {
+      const oldQty = FLEECE_OLD_FABRIC_QTY[t.value];
+      if (oldQty !== undefined && Number(merged.data[t.value].fabricQty) === oldQty) merged.data[t.value].fabricQty = 100;
+    });
+    // Saved Yarn labels — blank a row's label when it still equals the
+    // old file label or the user's description for that row; anything
+    // the user typed stays (the description shows lightly instead).
     FLEECE_BUILTIN_TYPES.forEach((t) => {
       const legacy = FLEECE_LEGACY_YARN_LABELS[t.value];
-      if (!legacy) return;
+      const oldLegacy = FLEECE_OLD_YARN_LABELS[t.value];
       merged.data[t.value].yarns.forEach((y, i) => {
-        if (legacy[i] && y.yarn === legacy[i]) y.yarn = "";
+        if ((legacy && legacy[i] && y.yarn === legacy[i]) || (oldLegacy && oldLegacy[i] && y.yarn === oldLegacy[i])) y.yarn = "";
       });
     });
     merged.addedFabrics = (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !FLEECE_BUILTIN_TYPES.some((t) => t.value === name));
