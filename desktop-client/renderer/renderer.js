@@ -1292,29 +1292,6 @@ function prodDownloadTemplate() {
   const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
   prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
 }
-function prodDownloadExample() {
-  if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
-  const wb = window.XLSX.utils.book_new();
-  const header = [...PROD_IMPORT_COLUMNS.map((c) => c.label), "Color", "Operator Name"];
-  const ws = window.XLSX.utils.aoa_to_sheet([header,
-    [1, 50, 2.2, 30, 28, 96, 25, "Red", "Rahim"],
-    [2, 30, 2.6, 30, 28, 90, 22, "Blue", "Karim"],
-    [3, 50, 2.2, 30, 28, 96, 25, "Green", ""],
-  ]);
-  ws["!cols"] = [12, 16, 18, 12, 10, 14, 10, 16, 16].map((wch) => ({ wch }));
-  window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
-  const readme = window.XLSX.utils.aoa_to_sheet([
-    ["Example file — upload it to see how the import works"],
-    ["These 3 machines are already filled in. Upload this file with the Upload Excel button — the machines will appear in the table with their Production / Shift."],
-    ["Then change any value, add more rows, or add your own columns (for example Color, Balancer Qty, Operator Name) — extra columns are kept and returned in the download."],
-    ["For Lycra fabrics, a Lycra row appears below each machine in the app — enter the denier there (for example 40); the lycra count and production are calculated automatically."],
-  ]);
-  readme["!cols"] = [{ wch: 95 }];
-  window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
-  const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Example.xlsx");
-  showNotice("Example file downloaded — upload it with the Upload Excel button.", "success");
-}
 function prodExportExcel() {
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const rows = prodRows();
@@ -3923,7 +3900,6 @@ $("#prodKeepFirst")?.addEventListener("click", () => {
 });
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
-$("#prodDownloadExampleBtn")?.addEventListener("click", prodDownloadExample);
 $("#prodAddFabricClose")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.add("hidden"); });
 $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.add("hidden"); });
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());

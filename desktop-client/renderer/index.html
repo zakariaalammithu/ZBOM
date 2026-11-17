@@ -311,13 +311,12 @@
           </div>
           <div class="prod-calc-input hidden" id="prodInputPanel">
             <button type="button" class="prod-panel-close" id="prodInputClose" title="Close">×</button>
-            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here — or download the filled example and upload it as it is to see how it works. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below. You can add your own columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file.</p>
+            <p><b>Bulk machine data</b> — download the Excel template, fill one machine per row (100, 500, 1,000 or more), then upload it here. The machines replace the current list for <b id="prodInputFabric"></b>. Rows with missing or wrong values are skipped and listed below. You can add your own columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file.</p>
             <div class="prod-input-actions">
               <button class="secondary" id="prodDownloadTemplateBtn" type="button">Download Template</button>
-              <button class="secondary" id="prodDownloadExampleBtn" type="button">Download Example</button>
               <button class="primary" id="prodUploadBtn" type="button">Upload Excel</button>
               <input type="file" id="prodUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
-              <button class="secondary" id="prodDownloadExcelBtn" type="button">Download Excel</button>
+              <button class="secondary" id="prodDownloadExcelBtn" type="button">Download Report</button>
             </div>
             <div id="prodImportReport"></div>
           </div>
