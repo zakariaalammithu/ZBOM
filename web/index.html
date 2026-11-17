@@ -368,6 +368,7 @@
           <div class="prod-calc-filter-row">
             <label>Fabric<select id="fleeceTypeSelect"></select></label>
             <button class="secondary" id="fleeceAddFabricToggle" type="button">+ Add Fabric</button>
+            <label class="fleece-qty-label">Total Fabric Qty (KG) <input id="fleeceFabricQty" type="number" min="0" step="any" value="23"></label>
           </div>
           <div class="prod-calc-add hidden" id="fleeceAddFabricPanel">
             <input id="fleeceNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
@@ -391,14 +392,13 @@
           </div>
           <div class="fleece-custom-actions">
             <button class="secondary" id="fleeceAddYarn" type="button">+ Add Yarn</button>
-            <label class="fleece-qty-label">Fabric Qty <input id="fleeceFabricQty" type="number" min="0" step="any" value="23"></label>
           </div>
           <div class="fleece-summary">
             <h4>Yarn Calculation</h4>
             <table class="fleece-summary-table">
-              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead>
+              <thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th><th>Yarn Qty</th></tr></thead>
               <tbody id="fleeceSummaryBody"></tbody>
-              <tfoot><tr><td></td><td>Total</td><td id="fleeceSummaryTotal">100</td></tr></tfoot>
+              <tfoot><tr><td></td><td>Total</td><td id="fleeceSummaryTotal">100</td><td id="fleeceSummaryQtyTotal">—</td></tr></tfoot>
             </table>
             <div class="fleece-summary-actions"><button class="secondary" id="fleeceCopyBtn" type="button">Copy table</button><button class="secondary" id="fleeceCopyPctBtn" type="button">Copy Yarn %</button><button class="secondary" id="fleecePrintBtn" type="button">Print</button><button class="secondary" id="fleeceDownloadReportBtn" type="button">Download PDF</button><span class="fleece-copy-note" id="fleeceCopyNote"></span></div>
           </div>

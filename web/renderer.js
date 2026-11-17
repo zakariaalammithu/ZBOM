@@ -1552,33 +1552,33 @@ function fleeceBuiltinDefaults() {
       { label: "Yarn-3", yarn: "10/1 CD", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.1 },
       { label: "Yarn-4 (Lycra)", yarn: "70D Lycra", kind: "Lycra", denier: 70, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
-    fleece: { fabricQty: "", lycraFactor: null, yarns: [
+    fleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.9 },
       { label: "Binder", yarn: "", kind: "Mirror", mirror: 0, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 3.85 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 5, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.95 },
     ]},
-    twoThreadFleece: { fabricQty: "", lycraFactor: null, yarns: [
+    twoThreadFleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 8, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 5 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2 },
     ]},
-    threeThreadFleece: { fabricQty: "", lycraFactor: null, yarns: [
+    threeThreadFleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
       { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
     ]},
-    frenchTerry: { fabricQty: "", lycraFactor: null, yarns: [
+    frenchTerry: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Loop", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
     ]},
-    terryVelour: { fabricQty: "", lycraFactor: null, yarns: [
+    terryVelour: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Ground", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Pile", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
     ]},
-    plaited: { fabricQty: "", lycraFactor: null, yarns: [
+    plaited: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Back", yarn: "", kind: "Ne", count: 30, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
     ]},
-    lycraFleece: { fabricQty: "", lycraFactor: 60, yarns: [
+    lycraFleece: { fabricQty: 100, lycraFactor: 60, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
       { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
@@ -1620,16 +1620,24 @@ function loadFleeceCalc() {
         }
       });
     });
+    // An empty Fabric Qty means "never set" — default it to 100 KG so the
+    // Yarn Qty column shows values (the four file types keep their own qty).
+    FLEECE_BUILTIN_TYPES.forEach((t) => {
+      if (merged.data[t.value].fabricQty === "") merged.data[t.value].fabricQty = 100;
+    });
     merged.addedFabrics = (parsed.addedFabrics || []).filter((name) => typeof name === "string" && name.trim() && !FLEECE_BUILTIN_TYPES.some((t) => t.value === name));
     merged.addedFabrics.forEach((name) => {
       const d = srcData[name];
       if (d && Array.isArray(d.yarns) && d.yarns.length) {
         merged.data[name] = { fabricQty: d.fabricQty ?? "", lycraFactor: null, yarns: d.yarns.map(fleeceNormalizeYarn) };
       } else if (parsed.yarns && Array.isArray(parsed.yarns[name]) && parsed.yarns[name].length) {
-        merged.data[name] = { fabricQty: "", lycraFactor: null, yarns: parsed.yarns[name].map((y, i) => fleeceNormalizeYarn({ label: `Yarn-${i + 1}`, kind: "Ne", count: y.count, sl: y.sl })) };
+        merged.data[name] = { fabricQty: 100, lycraFactor: null, yarns: parsed.yarns[name].map((y, i) => fleeceNormalizeYarn({ label: `Yarn-${i + 1}`, kind: "Ne", count: y.count, sl: y.sl })) };
       } else {
-        merged.data[name] = { fabricQty: "", lycraFactor: null, yarns: FLEECE_SAMPLE_YARNS.map((y) => ({ ...y })) };
+        merged.data[name] = { fabricQty: 100, lycraFactor: null, yarns: FLEECE_SAMPLE_YARNS.map((y) => ({ ...y })) };
       }
+    });
+    merged.addedFabrics.forEach((name) => {
+      if (merged.data[name] && merged.data[name].fabricQty === "") merged.data[name].fabricQty = 100;
     });
     if (![...FLEECE_BUILTIN_TYPES.map((t) => t.value), ...merged.addedFabrics].includes(merged.type)) merged.type = base.type;
     return merged;
@@ -1745,12 +1753,17 @@ function fleeceCompute(data) {
 function fleeceRenderSummary(rows) {
   const body = $("#fleeceSummaryBody");
   if (body) {
-    body.innerHTML = rows.map((row, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(row.label)}</td><td>${fleeceFmt(row.pct, 2)}</td></tr>`).join("");
+    body.innerHTML = rows.map((row, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(row.label)}</td><td>${fleeceFmt(row.pct, 2)}</td><td>${fleeceFmt(row.qty, 2)}</td></tr>`).join("");
   }
   const totalEl = $("#fleeceSummaryTotal");
   if (totalEl) {
     const allFinite = rows.length > 0 && rows.every((row) => Number.isFinite(row.pct));
     totalEl.textContent = allFinite ? String(Number(rows.reduce((s, row) => s + row.pct, 0).toFixed(2))) : "—";
+  }
+  const qtyTotalEl = $("#fleeceSummaryQtyTotal");
+  if (qtyTotalEl) {
+    const allFiniteQty = rows.length > 0 && rows.every((row) => Number.isFinite(row.qty));
+    qtyTotalEl.textContent = allFiniteQty ? fleeceFmt(rows.reduce((s, row) => s + row.qty, 0), 2) : "—";
   }
 }
 function fleeceCopyTable() {
@@ -1830,11 +1843,11 @@ function fleeceReportHTML() {
   if (!rep) return "";
   const t = rep.totals;
   const rowsHtml = rep.yarns.map((y) => `<tr><td>${fleeceEsc(y.kind)}</td><td>${fleeceEsc(y.yarn ?? "")}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleeceFmt(y.cotton, 2)}</td><td>${fleeceFmt(y.poly, 2)}</td><td>${fleeceFmt(y.others, 2)}</td><td>${fleeceFmt(y.feeder, 0)}</td><td>${fleeceFmt(y.sl, 2)}</td><td>${fleeceFmt(y.ratio, 5)}</td><td>${fleecePct(y.share)}</td><td>${fleeceFmt(y.cCotton, 2)}</td><td>${fleeceFmt(y.cPoly, 2)}</td><td>${fleeceFmt(y.cOthers, 2)}</td><td>${fleeceFmt(y.qty, 2)}</td></tr>`).join("");
-  const summaryHtml = rep.yarns.map((y, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleecePct(y.share)}</td></tr>`).join("");
+  const summaryHtml = rep.yarns.map((y, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleecePct(y.share)}</td><td>${fleeceFmt(y.qty, 2)}</td></tr>`).join("");
   const qtyLine = rep.fabricQty !== "" && rep.fabricQty !== null && rep.fabricQty !== undefined ? ` &nbsp;·&nbsp; Fabric Qty: ${fleeceEsc(String(rep.fabricQty))}` : "";
   return `<div class="fleece-report-head"><div class="fleece-report-title">ZBOM — Yarn Calculation Report</div><div class="fleece-report-meta"><strong>${fleeceEsc(rep.fabric)}</strong>${rep.subtitle ? ` — ${fleeceEsc(rep.subtitle)}` : ""}</div><div class="fleece-report-meta">Date: ${rep.date}${qtyLine}</div></div>`
     + `<table class="fleece-report-table"><thead><tr><th>Count Type</th><th>Yarn</th><th>Yarn Count</th><th>Cotton %</th><th>Poly %</th><th>Others %</th><th>Feeder</th><th>Stitch Length</th><th>Ratio</th><th>Consuming %</th><th>Cotton</th><th>Poly</th><th>Others</th><th>Yarn Qty</th></tr></thead><tbody>${rowsHtml}</tbody><tfoot><tr><td colspan="8">Total</td><td>${fleeceFmt(t.ratio, 5)}</td><td>${Number.isFinite(t.share) ? "100" : "—"}</td><td>${fleeceFmt(t.cotton, 2)}</td><td>${fleeceFmt(t.poly, 2)}</td><td>${fleeceFmt(t.others, 2)}</td><td>${fleeceFmt(t.qty, 2)}</td></tr></tfoot></table>`
-    + `<div class="fleece-report-sub">Yarn Calculation</div><table class="fleece-report-summary"><thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th></tr></thead><tbody>${summaryHtml}</tbody><tfoot><tr><td></td><td>Total</td><td>${Number.isFinite(t.share) ? "100" : "—"}</td></tr></tfoot></table>`
+    + `<div class="fleece-report-sub">Yarn Calculation</div><table class="fleece-report-summary"><thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th><th>Yarn Qty</th></tr></thead><tbody>${summaryHtml}</tbody><tfoot><tr><td></td><td>Total</td><td>${Number.isFinite(t.share) ? "100" : "—"}</td><td>${fleeceFmt(t.qty, 2)}</td></tr></tfoot></table>`
     + `<div class="fleece-report-foot">Generated by ZBOM · ${rep.date}</div>`;
 }
 function fleecePrintReport() {
@@ -1900,15 +1913,15 @@ function fleeceDownloadReport() {
   doc.setTextColor(30, 30, 30);
   doc.text("Yarn Calculation", 10, after);
   doc.autoTable({
-    head: [["SL no", "Yarn count", "Yarn %"]],
-    body: rep.yarns.map((yy, i) => [String(i + 1), yy.countLabel, fleecePct(yy.share)]),
-    foot: [["", "Total", Number.isFinite(t.share) ? "100" : "—"]],
+    head: [["SL no", "Yarn count", "Yarn %", "Yarn Qty"]],
+    body: rep.yarns.map((yy, i) => [String(i + 1), yy.countLabel, fleecePct(yy.share), fleeceFmt(yy.qty, 2)]),
+    foot: [["", "Total", Number.isFinite(t.share) ? "100" : "—", fleeceFmt(t.qty, 2)]],
     startY: after + 3,
     theme: "grid",
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: { fillColor: [10, 110, 209], textColor: 255 },
     footStyles: { fillColor: [240, 247, 255], fontStyle: "bold" },
-    columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 40 }, 2: { cellWidth: 30 } },
+    columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 40 }, 2: { cellWidth: 30 }, 3: { cellWidth: 30 } },
     margin: { left: 10, right: 10, bottom: 12 },
     didDrawPage: footer,
   });
@@ -2013,7 +2026,7 @@ function fleeceRecalcMain() {
   setText("#fleeceMainPolyTotal", allFinite("poly") ? fleeceFmt(sumFinite("poly"), 2) : "—");
   setText("#fleeceMainOthersTotal", allFinite("others") ? fleeceFmt(sumFinite("others"), 2) : "—");
   setText("#fleeceMainQtyTotal", allFinite("qty") ? fleeceFmt(sumFinite("qty"), 2) : "—");
-  fleeceRenderSummary(rows.map((r, i) => ({ label: fleeceYarnLabel(data.yarns[i], data), pct: r.share })));
+  fleeceRenderSummary(rows.map((r, i) => ({ label: fleeceYarnLabel(data.yarns[i], data), pct: r.share, qty: r.qty })));
 }
 function fleeceAddFabric(name) {
   const clean = String(name || "").trim();
@@ -2025,7 +2038,7 @@ function fleeceAddFabric(name) {
     return;
   }
   fleeceCalc.addedFabrics.push(clean);
-  fleeceCalc.data[clean] = { fabricQty: "", lycraFactor: null, yarns: FLEECE_SAMPLE_YARNS.map((y) => ({ ...y })) };
+  fleeceCalc.data[clean] = { fabricQty: 100, lycraFactor: null, yarns: FLEECE_SAMPLE_YARNS.map((y) => ({ ...y })) };
   fleeceCalc.type = clean;
   saveFleeceCalc();
   renderFleeceCalculation();
