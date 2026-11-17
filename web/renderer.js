@@ -1934,6 +1934,7 @@ function fleeceFmt(value, decimals) {
   return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "—";
 }
 function fleecePct(value) { return Number.isFinite(value) ? `${fleeceFmt(value, 2)}%` : "—"; }
+function fleecePct3(value) { return Number.isFinite(value) ? `${fleeceFmt(value, 3)}%` : "—"; }
 // Round values to 2 decimals (largest remainder) so the displayed values
 // add up to exactly `target` — the Consuming % column always sums to 100.
 function fleeceRoundToSum(values, target) {
@@ -1981,12 +1982,12 @@ function fleeceCompute(data) {
 function fleeceRenderSummary(rows) {
   const body = $("#fleeceSummaryBody");
   if (body) {
-    body.innerHTML = rows.map((row, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(row.label)}</td><td>${fleeceFmt(row.pct, 2)}</td><td>${fleeceFmt(row.qty, 2)}</td></tr>`).join("");
+    body.innerHTML = rows.map((row, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(row.label)}</td><td>${fleeceFmt(row.pct, 3)}</td><td>${fleeceFmt(row.qty, 2)}</td></tr>`).join("");
   }
   const totalEl = $("#fleeceSummaryTotal");
   if (totalEl) {
     const allFinite = rows.length > 0 && rows.every((row) => Number.isFinite(row.pct));
-    totalEl.textContent = allFinite ? String(Number(rows.reduce((s, row) => s + row.pct, 0).toFixed(2))) : "—";
+    totalEl.textContent = allFinite ? rows.reduce((s, row) => s + row.pct, 0).toFixed(3) : "—";
   }
   const qtyTotalEl = $("#fleeceSummaryQtyTotal");
   if (qtyTotalEl) {
@@ -1999,9 +2000,9 @@ function fleeceCopyTable() {
   if (!data) return;
   const rows = fleeceCompute(data).map((r, i) => ({ label: fleeceYarnLabel(data.yarns[i], data), pct: r.share }));
   const allFinite = rows.length > 0 && rows.every((row) => Number.isFinite(row.pct));
-  const total = allFinite ? String(Number(rows.reduce((s, row) => s + row.pct, 0).toFixed(2))) : "—";
+  const total = allFinite ? rows.reduce((s, row) => s + row.pct, 0).toFixed(3) : "—";
   const lines = ["SL no\tYarn count\tYarn %"];
-  rows.forEach((row, i) => lines.push(`${i + 1}\t${row.label}\t${fleeceFmt(row.pct, 2)}`));
+  rows.forEach((row, i) => lines.push(`${i + 1}\t${row.label}\t${fleeceFmt(row.pct, 3)}`));
   lines.push(`\tTotal\t${total}`);
   const text = lines.join("\n");
   const note = $("#fleeceCopyNote");
@@ -2016,7 +2017,7 @@ function fleeceCopyTable() {
 function fleeceCopyPct() {
   const data = fleeceCurrentData();
   if (!data) return;
-  const text = fleeceCompute(data).map((r) => fleeceFmt(r.share, 2)).join("\n");
+  const text = fleeceCompute(data).map((r) => fleeceFmt(r.share, 3)).join("\n");
   const note = $("#fleeceCopyNote");
   const done = () => { if (note) { note.textContent = "Yarn % copied — paste into Excel or SAP."; setTimeout(() => { note.textContent = ""; }, 3000); } };
   const fail = () => { if (note) note.textContent = "Copy did not work — select the Yarn % cells and press Ctrl+C."; };
@@ -2071,11 +2072,11 @@ function fleeceReportHTML() {
   if (!rep) return "";
   const t = rep.totals;
   const rowsHtml = rep.yarns.map((y) => `<tr><td>${fleeceEsc(y.kind)}</td><td>${fleeceEsc(y.yarn ?? "")}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleeceFmt(y.cotton, 2)}</td><td>${fleeceFmt(y.poly, 2)}</td><td>${fleeceFmt(y.others, 2)}</td><td>${fleeceFmt(y.feeder, 0)}</td><td>${fleeceFmt(y.sl, 2)}</td><td>${fleeceFmt(y.ratio, 5)}</td><td>${fleecePct(y.share)}</td><td>${fleeceFmt(y.cCotton, 2)}</td><td>${fleeceFmt(y.cPoly, 2)}</td><td>${fleeceFmt(y.cOthers, 2)}</td><td>${fleeceFmt(y.qty, 2)}</td></tr>`).join("");
-  const summaryHtml = rep.yarns.map((y, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleecePct(y.share)}</td><td>${fleeceFmt(y.qty, 2)}</td></tr>`).join("");
+  const summaryHtml = rep.yarns.map((y, i) => `<tr><td>${i + 1}</td><td>${fleeceEsc(y.countLabel)}</td><td>${fleecePct3(y.share)}</td><td>${fleeceFmt(y.qty, 2)}</td></tr>`).join("");
   const qtyLine = rep.fabricQty !== "" && rep.fabricQty !== null && rep.fabricQty !== undefined ? ` &nbsp;·&nbsp; Fabric Qty: ${fleeceEsc(String(rep.fabricQty))}` : "";
   return `<div class="fleece-report-head"><div class="fleece-report-title">ZBOM — Yarn Calculation Report</div><div class="fleece-report-meta"><strong>${fleeceEsc(rep.fabric)}</strong>${rep.subtitle ? ` — ${fleeceEsc(rep.subtitle)}` : ""}</div><div class="fleece-report-meta">Date: ${rep.date}${qtyLine}</div></div>`
     + `<table class="fleece-report-table"><thead><tr><th>Count Type</th><th>Yarn</th><th>Yarn Count</th><th>Cotton %</th><th>Poly %</th><th>Others %</th><th>Feeder</th><th>Stitch Length</th><th>Ratio</th><th>Consuming %</th><th>Cotton</th><th>Poly</th><th>Others</th><th>Yarn Qty</th></tr></thead><tbody>${rowsHtml}</tbody><tfoot><tr><td colspan="8">Total</td><td>${fleeceFmt(t.ratio, 5)}</td><td>${Number.isFinite(t.share) ? "100" : "—"}</td><td>${fleeceFmt(t.cotton, 2)}</td><td>${fleeceFmt(t.poly, 2)}</td><td>${fleeceFmt(t.others, 2)}</td><td>${fleeceFmt(t.qty, 2)}</td></tr></tfoot></table>`
-    + `<div class="fleece-report-sub">Yarn Calculation</div><table class="fleece-report-summary"><thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th><th>Yarn Qty</th></tr></thead><tbody>${summaryHtml}</tbody><tfoot><tr><td></td><td>Total</td><td>${Number.isFinite(t.share) ? "100" : "—"}</td><td>${fleeceFmt(t.qty, 2)}</td></tr></tfoot></table>`
+    + `<div class="fleece-report-sub">Yarn Calculation</div><table class="fleece-report-summary"><thead><tr><th>SL no</th><th>Yarn count</th><th>Yarn %</th><th>Yarn Qty</th></tr></thead><tbody>${summaryHtml}</tbody><tfoot><tr><td></td><td>Total</td><td>${Number.isFinite(t.share) ? "100.000" : "—"}</td><td>${fleeceFmt(t.qty, 2)}</td></tr></tfoot></table>`
     + `<div class="fleece-report-foot">Generated by ZBOM · ${rep.date}</div>`;
 }
 function fleecePrintReport() {
@@ -2142,8 +2143,8 @@ function fleeceDownloadReport() {
   doc.text("Yarn Calculation", 10, after);
   doc.autoTable({
     head: [["SL no", "Yarn count", "Yarn %", "Yarn Qty"]],
-    body: rep.yarns.map((yy, i) => [String(i + 1), yy.countLabel, fleecePct(yy.share), fleeceFmt(yy.qty, 2)]),
-    foot: [["", "Total", Number.isFinite(t.share) ? "100" : "—", fleeceFmt(t.qty, 2)]],
+    body: rep.yarns.map((yy, i) => [String(i + 1), yy.countLabel, fleecePct3(yy.share), fleeceFmt(yy.qty, 2)]),
+    foot: [["", "Total", Number.isFinite(t.share) ? "100.000" : "—", fleeceFmt(t.qty, 2)]],
     startY: after + 3,
     theme: "grid",
     styles: { fontSize: 9, cellPadding: 2 },
