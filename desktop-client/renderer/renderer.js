@@ -1647,19 +1647,47 @@ function fleeceFmt(value, decimals) {
   return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "—";
 }
 function fleecePct(value) { return Number.isFinite(value) ? `${fleeceFmt(value, 2)}%` : "—"; }
+// Round values to 2 decimals (largest remainder) so the displayed values
+// add up to exactly `target` — the Consuming % column always sums to 100.
+function fleeceRoundToSum(values, target) {
+  const cents = values.map((v) => Math.floor(v * 100 + 1e-9));
+  let left = Math.round(target * 100) - cents.reduce((s, c) => s + c, 0);
+  const order = values.map((v, i) => ({ i, rem: v * 100 - cents[i] }))
+    .sort((a, b) => b.rem - a.rem || a.i - b.i);
+  for (let k = 0; k < order.length && left > 0; k += 1) { cents[order[k].i] += 1; left -= 1; }
+  for (let k = order.length - 1; k >= 0 && left < 0; k -= 1) { cents[order[k].i] -= 1; left += 1; }
+  return cents.map((c) => c / 100);
+}
 function fleeceCompute(data) {
   const yarns = data ? data.yarns : [];
   const ratios = yarns.map((y) => fleeceYarnRatio(y, data));
   const totalRatio = ratios.reduce((s, v) => s + (Number.isFinite(v) && v >= 0 ? v : 0), 0);
   const fabricQty = fleeceNum(data ? data.fabricQty : NaN);
+  const canAdjust = totalRatio > 0 && ratios.every((v) => Number.isFinite(v) && v >= 0);
+  const exactShares = ratios.map((v) => (totalRatio > 0 && Number.isFinite(v) ? (v / totalRatio) * 100 : NaN));
+  const shares = canAdjust ? fleeceRoundToSum(exactShares, 100) : exactShares;
   return yarns.map((y, i) => {
-    const share = totalRatio > 0 && Number.isFinite(ratios[i]) ? (ratios[i] / totalRatio) * 100 : NaN;
+    const share = shares[i];
     const frac = Number.isFinite(share) ? share / 100 : NaN;
-    const comp = (pct) => { const p = fleeceNum(pct); return Number.isFinite(frac) && Number.isFinite(p) ? frac * p : NaN; };
+    const exactFrac = Number.isFinite(exactShares[i]) ? exactShares[i] / 100 : NaN;
+    const compExact = (pct) => { const p = fleeceNum(pct); return Number.isFinite(exactFrac) && Number.isFinite(p) ? exactFrac * p : NaN; };
+    let ind = [compExact(y.cotton), compExact(y.poly), compExact(y.others)];
+    if (canAdjust) {
+      // Individual values from the ADJUSTED share, rounded within the row so
+      // the row's Cotton + Poly + Others add up to its Consuming %.
+      const adj = [y.cotton, y.poly, y.others].map((pct) => { const p = fleeceNum(pct); return Number.isFinite(frac) && Number.isFinite(p) ? frac * p : NaN; });
+      if (adj.every((v) => Number.isFinite(v) && v >= 0)) {
+        const rowTarget = Math.round(adj.reduce((s, v) => s + v, 0) * 100) / 100;
+        ind = fleeceRoundToSum(adj, rowTarget);
+      }
+    }
     return {
-      ratio: ratios[i], share,
-      cotton: comp(y.cotton), poly: comp(y.poly), others: comp(y.others),
-      qty: Number.isFinite(frac) && Number.isFinite(fabricQty) ? fabricQty * frac : NaN,
+      // Displayed ratio/qty are rounded to their shown decimals, so each
+      // Total equals the sum of the values shown in its column.
+      ratio: Number.isFinite(ratios[i]) ? Math.round(ratios[i] * 1e5) / 1e5 : ratios[i],
+      share,
+      cotton: ind[0], poly: ind[1], others: ind[2],
+      qty: Number.isFinite(exactFrac) && Number.isFinite(fabricQty) ? Math.round(fabricQty * exactFrac * 100) / 100 : NaN,
     };
   });
 }
