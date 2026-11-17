@@ -914,6 +914,22 @@ const PROD_FABRIC_INFO = {
   "Rib (Custom Ratio)": { factor: 2, note: "Double-bed rib — set your own face : back ratio below." },
   "Rib-Interlock": { factor: 2, note: "Double-bed rib-interlock — two needle beds knit." },
   Jacquard: { factor: 1, note: "Single-bed jacquard — set the factor to 2 for a double-bed jacquard." },
+  "French Terry": { factor: 1, note: "Single-bed terry — face yarn + loop yarn on the back." },
+  "Lycra French Terry": { factor: 1, note: "Single-bed terry with lycra fed together with the main yarn." },
+  "Terry Velour": { factor: 1, note: "Single-bed terry, loops sheared — same formula as French Terry." },
+  Fleece: { factor: 1, note: "Single-bed fleece — 2- or 3-thread; enter the face yarn count." },
+  "Lycra Fleece": { factor: 1, note: "Single-bed fleece with lycra fed together with the main yarn." },
+  "Polar Fleece": { factor: 1, note: "Single-bed polar fleece (French-terry base) — set the factor to 2 for an interlock base." },
+  Honeycomb: { factor: 1, note: "Single-bed honeycomb — tuck stitches, same formula as Single Jersey." },
+  "Double Pique": { factor: 2, note: "Double-bed double pique — two needle beds knit." },
+  "Birdseye Pique": { factor: 2, note: "Double-bed birdseye pique — tuck stitches, two needle beds knit." },
+  "Ponte di Roma": { factor: 2, note: "Double-bed ponte — interlock gating, two needle beds knit." },
+  "Ottoman Rib": { factor: 2, note: "Double-bed ottoman rib — interlock gating, two needle beds knit." },
+  "Milano Rib": { factor: 2, note: "Double-bed milano rib — one rib row + two plain rows." },
+  "Full Cardigan": { factor: 2, note: "Double-bed full cardigan rib — two needle beds knit." },
+  "Half Cardigan": { factor: 2, note: "Double-bed half cardigan rib — two needle beds knit." },
+  Eightlock: { factor: 2, note: "Double-bed eightlock — interlock gating, two needle beds knit." },
+  "Double Face": { factor: 2, note: "Double-bed double-face — two right faces, two needle beds knit." },
 };
 const PROD_BUILTIN_FABRICS = Object.keys(PROD_FABRIC_INFO);
 const PROD_STORAGE_KEY = "zbom-production-calculation-v1";
@@ -1486,6 +1502,10 @@ const FLEECE_BUILTIN_TYPES = [
   { value: "fleece", label: "Fleece" },
   { value: "twoThreadFleece", label: "Two Thread Fleece" },
   { value: "threeThreadFleece", label: "Three Thread Fleece" },
+  { value: "frenchTerry", label: "French Terry" },
+  { value: "terryVelour", label: "Terry Velour" },
+  { value: "plaited", label: "Plaited Fabric" },
+  { value: "lycraFleece", label: "Lycra Fleece" },
 ];
 const FLEECE_TYPE_SUBTITLES = {
   twoThread: "Plain + Loop — cotton and polyester.",
@@ -1495,8 +1515,12 @@ const FLEECE_TYPE_SUBTITLES = {
   fleece: "Three-thread fleece, filament not used — Face + Binder + Back. The Binder count follows the Face count, as in the sheet.",
   twoThreadFleece: "Two-thread fleece — Face + Back.",
   threeThreadFleece: "Three-thread fleece, filament used — Face + Filament Binder + Back.",
+  frenchTerry: "Two-thread terry — Face + Loop (loops left uncut).",
+  terryVelour: "Two-thread terry, loops sheared — Ground + Pile.",
+  plaited: "Two yarns plated together — Face + Back, one yarn on each side.",
+  lycraFleece: "Three-thread fleece with lycra — Face + Filament Binder + Back + Lycra.",
 };
-const FLEECE_SUGGESTED_FABRICS = ["Single Jersey", "Pique", "Rib", "Interlock"];
+const FLEECE_SUGGESTED_FABRICS = ["Interlock"];
 const FLEECE_MAX_YARNS = 8;
 const FLEECE_DENIER_CONSTANT = 5315;
 const FLEECE_LYCRA_CONSTANT = 7315;
@@ -1542,6 +1566,24 @@ function fleeceBuiltinDefaults() {
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
       { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
+    ]},
+    frenchTerry: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Loop", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
+    ]},
+    terryVelour: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Ground", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Pile", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
+    ]},
+    plaited: { fabricQty: "", lycraFactor: null, yarns: [
+      { label: "Face", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Back", yarn: "", kind: "Ne", count: 30, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
+    ]},
+    lycraFleece: { fabricQty: "", lycraFactor: 60, yarns: [
+      { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
+      { label: "Binder — Filament", yarn: "75D Poly", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
+      { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
+      { label: "Lycra", yarn: "40D Lycra", kind: "Lycra", cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
   };
 }
