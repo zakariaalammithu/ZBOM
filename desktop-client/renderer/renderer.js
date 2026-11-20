@@ -1924,6 +1924,10 @@ const FLEECE_REMOVED_FABRIC_FALLBACK = {
   twoThreadNoPoly: "threeThread",
   threeThreadPoly: "threeThreadFleece",
   lycraFleece: "threeThreadFleece",
+  // "Interlock" (capital I) was the suggested-fabric name before Interlock
+  // became a builtin (value key "interlock"); a saved type of "Interlock"
+  // opens the builtin.
+  Interlock: "interlock",
 };
 const FLEECE_TYPE_SUBTITLES = {
   twoThread: "Two yarns (Ne + Ne) — covers 2 Thread, Two Thread Fleece, French Terry, Terry Velour and Plaited. Edit the counts for your fabric.",
