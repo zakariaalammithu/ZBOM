@@ -286,12 +286,11 @@
           <div><span>CIRCULAR KNITTING</span><h2>Production Calculation</h2><p>Production per shift from machine settings — one standard formula for every circular-knitting fabric: ×1 for single-bed fabrics, ×2 for double-bed fabrics (Rib, Interlock).</p></div>
         </div>
         <div class="panel prod-calc-panel">
-          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its production. 6 fabric types cover every fabric — Single Jersey for single-bed, Rib for double-bed, Fleece and French Terry for multi-yarn. Add any other fabric below.</p></div></div>
+          <div class="panel-title"><div><h3>Fabric Type</h3><p>Select a fabric to calculate its production. 6 fabric types cover every fabric — Single Jersey for single-bed, Rib for double-bed, Fleece and French Terry for multi-yarn.</p></div></div>
           <div class="prod-calc-filter-row">
             <label>Fabric<select id="prodFabricSelect"></select></label>
             <label>Shift Hours<input id="prodShiftHours" type="number" min="1" max="24" step="0.5" value="24"></label>
             <label>Efficiency %<input id="prodEfficiency" type="number" min="1" max="100" step="1" value="85"></label>
-            <button class="secondary" id="prodAddFabricToggle" type="button">+ Add Fabric</button>
             <button class="secondary" id="prodInputToggle" type="button">Input Name</button>
           </div>
           <div class="prod-calc-factor-row">
@@ -303,12 +302,6 @@
             <label>Rib ratio — Face<input id="prodRatioFace" type="number" min="1" step="1" value="2"></label>
             <label>Back<input id="prodRatioBack" type="number" min="1" step="1" value="1"></label>
             <small>The ratio is for your record — the factor stays ×2 because both needle beds knit.</small>
-          </div>
-          <div class="prod-calc-add hidden" id="prodAddFabricPanel">
-            <button type="button" class="prod-panel-close" id="prodAddFabricClose" title="Close">×</button>
-            <input id="prodNewFabricName" placeholder="Fabric name, e.g. Rib" maxlength="40">
-            <button class="primary" id="prodAddFabricBtn" type="button">Add Fabric Calculation</button>
-            <small>Added fabrics use the same standard circular-knitting formula, with production factor ×1 unless you change it.</small>
           </div>
           <div class="prod-calc-input hidden" id="prodInputPanel">
             <button type="button" class="prod-panel-close" id="prodInputClose" title="Close">×</button>

@@ -1324,8 +1324,7 @@ function renderProductionCalculation() {
   if (notice) {
     notice.classList.toggle("hidden", ready);
     if (!ready) {
-      notice.innerHTML = `Production calculation for <b>${prodEsc(prodCalc.fabric)}</b> is not added yet. <button type="button" class="secondary" id="prodAddThisFabric">Add ${prodEsc(prodCalc.fabric)} Calculation</button>`;
-      $("#prodAddThisFabric")?.addEventListener("click", () => prodAddFabric(prodCalc.fabric));
+      notice.innerHTML = `Production calculation for <b>${prodEsc(prodCalc.fabric)}</b> is not available.`;
     }
   }
   if (ready) {
@@ -1462,27 +1461,6 @@ function prodRecalcRow(i) {
   prodUpdateYarnRow(i);
   prodUpdateTotals();
 }
-function prodAddFabric(name) {
-  const clean = String(name || "").trim();
-  if (!clean) { showNotice("Enter a fabric name to add it.", "warning"); return; }
-  if (prodAvailableFabrics().includes(clean)) {
-    prodCalc.fabric = clean;
-    saveProdCalc();
-    renderProductionCalculation();
-    return;
-  }
-  prodCalc.addedFabrics.push(clean);
-  // Keep any rows already saved under this name (for example a removed rib
-  // variant the user adds back) instead of overwriting them with a sample.
-  if (!Array.isArray(prodCalc.rows[clean]) || !prodCalc.rows[clean].length) prodCalc.rows[clean] = [{ ...PROD_SAMPLE_ROW }];
-  prodCalc.fabric = clean;
-  saveProdCalc();
-  renderProductionCalculation();
-  showNotice(`${clean} production calculation added.`, "success");
-}
-
-
-
 // ---- Production Calculation: bulk Excel import / export ("Input Name") ----
 // Uses the vendored SheetJS (window.XLSX), loaded on the web and in the
 // desktop app. The template has the input columns (including Needles); the user can add any
@@ -4280,10 +4258,6 @@ $("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodN
 $("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; saveProdCalc(); prodRenderFactorNote(); renderProdTable(); } }, 250));
 $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
-$("#prodAddFabricToggle")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.toggle("hidden"); $("#prodNewFabricName")?.focus(); });
-$("#prodAddFabricBtn")?.addEventListener("click", () => prodAddFabric($("#prodNewFabricName")?.value));
-$("#prodNewFabricName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") prodAddFabric(event.target.value); });
-$$("#prodAddFabricPanel [data-add-fabric]").forEach((btn) => btn.addEventListener("click", () => prodAddFabric(btn.dataset.addFabric)));
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
 $("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric] = [{ ...PROD_SAMPLE_ROW }]; saveProdCalc(); renderProdTable(); });
 $("#prodTableBody")?.addEventListener("input", (event) => {
@@ -4340,7 +4314,6 @@ $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.c
 $("#prodLycraToggle")?.addEventListener("click", () => prodToggleExtra("lycra"));
 $("#prodFilamentToggle")?.addEventListener("click", () => prodToggleExtra("filament"));
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
-$("#prodAddFabricClose")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.add("hidden"); });
 $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.add("hidden"); });
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
 $("#prodUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
