@@ -893,30 +893,12 @@ const PROD_LB_PER_KG = 2.2046;
 // (factor 1); set 2 for a double-bed jacquard. The factor is editable
 // per fabric below.
 const PROD_FABRIC_INFO = {
-  "Single Jersey": { factor: 1, note: "Single-bed fabric — one set of loops." },
-  "Lycra Single Jersey": { factor: 1, note: "Single-bed fabric with lycra fed together with the main yarn." },
-  Pique: { factor: 1, note: "Single-bed pique — same formula as Single Jersey." },
-  "Lycra Pique": { factor: 1, note: "Single-bed pique with lycra fed together with the main yarn." },
-  "Single Lacoste (S/L)": { factor: 1, note: "Single-bed lacoste (single pique) — tuck stitches, same formula." },
-  "Double Lacoste (D/L)": { factor: 1, note: "Double lacoste (double pique) — single-bed, same formula." },
-  Interlock: { factor: 2, note: "Double-bed fabric — two needle beds knit at every feeder." },
-  "Lycra Interlock": { factor: 2, note: "Double-bed interlock with lycra fed together with the main yarn." },
-  "Rib": { factor: 2, note: "Double-bed rib — one Rib for all rib types; set the needle count for your rib (1x1, 2x2, 2x4, Lycra rib)." },
-  Jacquard: { factor: 1, note: "Single-bed jacquard — set the factor to 2 for a double-bed jacquard." },
-  "French Terry": { factor: 1, note: "Single-bed terry — face yarn + loop yarn; each yarn has its own count and stitch length, and their productions add up." },
-  "Lycra French Terry": { factor: 1, note: "Single-bed terry with lycra — face + loop yarns plus the lycra yarn; their productions add up." },
-  "Terry Velour": { factor: 1, note: "Single-bed terry, loops sheared — ground + pile yarns; their productions add up." },
+  "Single Jersey": { factor: 1, note: "Single-bed fabric — one set of loops. Covers every single-bed single-yarn fabric (Pique, Lacoste, Jacquard, Honeycomb); turn the Lycra button on for a lycra fabric, set the factor to 2 for a double-bed fabric." },
+  "Rib": { factor: 2, note: "Double-bed rib — one Rib for every double-bed single-yarn fabric (all ribs, Interlock, Double Pique, Birdseye, Ponte, Eightlock, Double Face); set the needle count for your fabric, turn the Lycra button on for a lycra fabric." },
+  "French Terry": { factor: 1, note: "Single-bed terry — face yarn + loop yarn; each yarn has its own count and stitch length, and their productions add up. Also covers Terry Velour and Polar Fleece (same yarns); turn the Lycra button on for a lycra terry." },
   Fleece: { factor: 1, note: "Single-bed fleece — face + binder + back yarns; each has its own count and stitch length, and their productions add up." },
   "2 Thread Fleece": { factor: 1, note: "Single-bed two-thread fleece — face + back yarns; their productions add up." },
-  "3 Thread Fleece": { factor: 1, note: "Single-bed three-thread fleece — face + filament binder + back; their productions add up." },
-  "Lycra Fleece": { factor: 1, note: "Single-bed fleece with lycra — face + filament binder + back + lycra; their productions add up." },
-  "Polar Fleece": { factor: 1, note: "Single-bed polar fleece (French-terry base) — face + loop yarns; their productions add up. Set the factor to 2 for an interlock base." },
-  Honeycomb: { factor: 1, note: "Single-bed honeycomb — tuck stitches, same formula as Single Jersey." },
-  "Double Pique": { factor: 2, note: "Double-bed double pique — two needle beds knit." },
-  "Birdseye Pique": { factor: 2, note: "Double-bed birdseye pique — tuck stitches, two needle beds knit." },
-  "Ponte di Roma": { factor: 2, note: "Double-bed ponte — interlock gating, two needle beds knit." },
-  Eightlock: { factor: 2, note: "Double-bed eightlock — interlock gating, two needle beds knit." },
-  "Double Face": { factor: 2, note: "Double-bed double-face — two right faces, two needle beds knit." },
+  "3 Thread Fleece": { factor: 1, note: "Single-bed three-thread fleece — face + filament binder + back; their productions add up. Turn the Lycra button on for Lycra Fleece." },
 };
 // Multi-yarn fabrics (2026-11-17): the extra yarns of a machine, as in the
 // Yarn Calculation (same labels, counts and stitch lengths). The machine
@@ -944,25 +926,30 @@ const PROD_MULTI_YARN = {
   "French Terry": { main: "Face Loop", extra: [
     { label: "Loop", kind: "Ne", count: 20, sl: 1.4 },
   ]},
-  "Lycra French Terry": { main: "Face Loop", extra: [
-    { label: "Loop", kind: "Ne", count: 20, sl: 1.4 },
-  ]},
-  "Terry Velour": { main: "Ground", extra: [
-    { label: "Pile", kind: "Ne", count: 20, sl: 1.4 },
-  ]},
-  "Lycra Fleece": { main: "Face Loop", extra: [
-    { label: "Binder — Filament", kind: "Denier", denier: 75, sl: 2.75 },
-    { label: "Back Loop", kind: "Ne", count: 10, sl: 1.6 },
-  ]},
-  "Polar Fleece": { main: "Face Loop", extra: [
-    { label: "Loop", kind: "Ne", count: 20, sl: 1.4 },
-  ]},
 };
-// Rib variants removed 2026-11-20: one "Rib" (Needles + Lycra/Filament
-// buttons) now covers every rib, so the named variants are gone from the
-// list. Their saved rows stay in localStorage; if a saved fabric was one
-// of them, the app opens "Rib" instead (see loadProdCalc).
-const PROD_REMOVED_RIB_FABRICS = ["Rib 1x1", "Rib 2x1", "Rib 2x2", "Rib 2x3", "Rib 3x3", "Lycra Rib 1x1", "Lycra Rib 2x1", "Lycra Rib 2x2", "Lycra Rib 2x3", "Lycra Rib 3x3", "Rib (Custom Ratio)", "Rib-Interlock", "Ottoman Rib", "Milano Rib", "Full Cardigan", "Half Cardigan"];
+// Fabrics removed from the list (2026-11-20 / 2026-11-21): six entries now
+// cover every fabric — "Single Jersey" for every single-bed single-yarn
+// fabric, "Rib" for every double-bed single-yarn fabric, and the four
+// multi-yarn fabrics (Fleece, 2/3 Thread Fleece, French Terry). A removed
+// fabric maps to the entry that does its work; its saved rows stay in
+// localStorage, and a saved fabric that was removed opens its entry
+// instead (see loadProdCalc).
+const PROD_REMOVED_FABRIC_FALLBACK = {
+  // Rib variants (2026-11-20): one "Rib" covers every rib.
+  "Rib 1x1": "Rib", "Rib 2x1": "Rib", "Rib 2x2": "Rib", "Rib 2x3": "Rib", "Rib 3x3": "Rib",
+  "Lycra Rib 1x1": "Rib", "Lycra Rib 2x1": "Rib", "Lycra Rib 2x2": "Rib", "Lycra Rib 2x3": "Rib", "Lycra Rib 3x3": "Rib",
+  "Rib (Custom Ratio)": "Rib", "Rib-Interlock": "Rib", "Ottoman Rib": "Rib", "Milano Rib": "Rib", "Full Cardigan": "Rib", "Half Cardigan": "Rib",
+  // Single-bed single-yarn fabrics (2026-11-21): "Single Jersey" (factor 1).
+  "Lycra Single Jersey": "Single Jersey", "Pique": "Single Jersey", "Lycra Pique": "Single Jersey",
+  "Single Lacoste (S/L)": "Single Jersey", "Double Lacoste (D/L)": "Single Jersey",
+  "Jacquard": "Single Jersey", "Honeycomb": "Single Jersey",
+  // Double-bed single-yarn fabrics (2026-11-21): "Rib" (factor 2).
+  "Interlock": "Rib", "Lycra Interlock": "Rib", "Double Pique": "Rib", "Birdseye Pique": "Rib",
+  "Ponte di Roma": "Rib", "Eightlock": "Rib", "Double Face": "Rib",
+  // Multi-yarn variants (2026-11-21): the base fabric + the Lycra button.
+  "Lycra French Terry": "French Terry", "Terry Velour": "French Terry", "Polar Fleece": "French Terry",
+  "Lycra Fleece": "3 Thread Fleece",
+};
 const PROD_BUILTIN_FABRICS = Object.keys(PROD_FABRIC_INFO);
 const PROD_STORAGE_KEY = "zbom-production-calculation-v1";
 const PROD_SAMPLE_ROW = { machine: "1", count: 50, stitchLength: 2.2, dia: 30, gauge: 28, needles: "", feeders: 96, rpm: 25 };
@@ -999,7 +986,7 @@ function loadProdCalc() {
     merged.columns = { ...(parsed.columns || {}) };
     PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
-    if (PROD_REMOVED_RIB_FABRICS.includes(merged.fabric)) merged.fabric = "Rib";
+    if (PROD_REMOVED_FABRIC_FALLBACK[merged.fabric]) merged.fabric = PROD_REMOVED_FABRIC_FALLBACK[merged.fabric];
     return merged;
   } catch (e) {
     return prodDefaultState();
