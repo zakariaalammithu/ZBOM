@@ -990,6 +990,7 @@ function prodDefaultState() {
     factors: {},
     ratios: {},
     lycra: {},
+    extras: {},
     columns: {},
     rows: Object.fromEntries(PROD_BUILTIN_FABRICS.map((name) => [name, [{ ...PROD_SAMPLE_ROW }]])),
   };
@@ -1005,6 +1006,7 @@ function loadProdCalc() {
     merged.factors = { ...(parsed.factors || {}) };
     merged.ratios = { ...(parsed.ratios || {}) };
     merged.lycra = { ...(parsed.lycra || {}) };
+    merged.extras = { ...(parsed.extras || {}) };
     merged.columns = { ...(parsed.columns || {}) };
     PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
@@ -1118,6 +1120,30 @@ function prodLycraDenierFor(row) {
 function prodLycraPerShift(row) {
   return prodProductionFor(row, 5315 / prodLycraDenierFor(row));
 }
+// A Lycra row appears below a machine for fabrics whose name has "Lycra",
+// or for any fabric where the user switched the Lycra button on. A
+// Filament row appears only where the user switched the Filament button on.
+// Both rows add their production to the machine's one result, so a single
+// "Rib" covers a normal rib, a Lycra rib and a filament rib.
+function prodHasLycra() {
+  return prodCalc.fabric.includes("Lycra") || !!(prodCalc.extras && prodCalc.extras[prodCalc.fabric] && prodCalc.extras[prodCalc.fabric].lycra);
+}
+function prodHasFilament() {
+  return !!(prodCalc.extras && prodCalc.extras[prodCalc.fabric] && prodCalc.extras[prodCalc.fabric].filament);
+}
+// Filament: a denier yarn with its own stitch length (like the filament in
+// 3 Thread Fleece: 75D, SL 2.75). Defaults match that filament.
+function prodFilamentDenierFor(row) {
+  const v = prodNum(row && row.filamentDenier);
+  return Number.isFinite(v) && v > 0 ? v : 75;
+}
+function prodFilamentSlFor(row) {
+  const v = prodNum(row && row.filamentSl);
+  return Number.isFinite(v) && v > 0 ? v : 2.75;
+}
+function prodFilamentPerShift(row) {
+  return prodProductionFor({ ...row, stitchLength: prodFilamentSlFor(row) }, 5315 / prodFilamentDenierFor(row));
+}
 // The extra yarns of a multi-yarn fabric (PROD_MULTI_YARN), resolved with
 // the structure's defaults when a machine has no saved value for a yarn.
 // `count` is the yarn's count in Ne (5315 / denier for denier yarns).
@@ -1139,8 +1165,8 @@ function prodYarnPerShift(row, yv) {
   return prodProductionFor({ ...row, stitchLength: yv.sl }, yv.count);
 }
 // A machine has ONE production result: the main yarn plus every extra
-// yarn (and the lycra yarn on Lycra fabrics) together — one machine, one
-// fabric. Single-yarn fabrics have just the main yarn.
+// yarn (and the lycra / filament yarns, where switched on) together —
+// one machine, one fabric. Single-yarn fabrics have just the main yarn.
 function prodRowProduction(row) {
   const main = prodProductionPerShift(row);
   if (!Number.isFinite(main)) return main;
@@ -1149,9 +1175,13 @@ function prodRowProduction(row) {
     const p = prodYarnPerShift(row, yv);
     if (Number.isFinite(p)) total += p;
   });
-  if (prodCalc.fabric.includes("Lycra")) {
+  if (prodHasLycra()) {
     const lycra = prodLycraPerShift(row);
     if (Number.isFinite(lycra)) total += lycra;
+  }
+  if (prodHasFilament()) {
+    const filament = prodFilamentPerShift(row);
+    if (Number.isFinite(filament)) total += filament;
   }
   return total;
 }
@@ -1188,13 +1218,38 @@ function prodUpdateYarnRow(i) {
 function prodUpdateLycraTotals() {
   const wrap = $("#prodLycraTotals");
   if (!wrap) return;
-  const isLycra = prodCalc.fabric.includes("Lycra");
+  const isLycra = prodHasLycra();
   wrap.classList.toggle("hidden", !isLycra);
   if (!isLycra) return;
   const rows = prodRows();
   const lycraTotal = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
   const prodEl = $("#prodLycraProductionTotal");
   if (prodEl) prodEl.textContent = `${prodFmt(lycraTotal)} kg`;
+}
+function prodUpdateFilamentRow(i) {
+  const row = prodRows()[i];
+  const tr = document.querySelector(`#prodTableBody [data-filament-row="${i}"]`);
+  if (!tr || !row) return;
+  const denier = prodFilamentDenierFor(row);
+  const label = tr.querySelector(".prod-filament-label");
+  if (label) label.textContent = `${row.machine ?? i + 1} · Filament`;
+  const countEl = tr.querySelector(".prod-filament-count");
+  if (countEl) countEl.textContent = `= ${prodFmt(5315 / denier, 2)} Ne`;
+  ["dia", "gauge", "needles", "feeders", "rpm"].forEach((key) => {
+    const cell = tr.querySelector(`[data-mirror="${key}"]`);
+    if (cell) cell.textContent = key === "needles" ? prodNeedlesText(row) : (row[key] ?? "");
+  });
+}
+function prodUpdateFilamentTotals() {
+  const wrap = $("#prodFilamentTotals");
+  if (!wrap) return;
+  const hasFil = prodHasFilament();
+  wrap.classList.toggle("hidden", !hasFil);
+  if (!hasFil) return;
+  const rows = prodRows();
+  const total = rows.reduce((s, r) => s + (prodFilamentPerShift(r) || 0), 0);
+  const el = $("#prodFilamentProductionTotal");
+  if (el) el.textContent = `${prodFmt(total)} kg`;
 }
 function prodUpdateYarnTotals() {
   const wrap = $("#prodYarnTotals");
@@ -1216,7 +1271,7 @@ function prodUpdateYarnTotals() {
 
 // Counter conversions, generalised to multi-yarn machines: production from
 // a counter is the counter times the sum over ALL yarns (main + extra +
-// lycra) of (Needles x SL_yarn x Feeders) /
+// lycra + filament) of (Needles x SL_yarn x Feeders) /
 // (25.4 x 36 x 840 x Count_yarn x 2.2046) — the same sum prodRowProduction
 // uses, without the shift-hours and efficiency (theoretical, as in the
 // sheet). Counter from production is the target divided by that sum.
@@ -1232,7 +1287,8 @@ function prodProductionFromCounter(row, counter) {
   };
   addTerm(prodNum(row.count), prodNum(row.stitchLength));
   prodYarnValues(row).forEach((yv) => addTerm(yv.count, yv.sl));
-  if (prodCalc.fabric.includes("Lycra")) addTerm(5315 / prodLycraDenierFor(row), prodNum(row.stitchLength));
+  if (prodHasLycra()) addTerm(5315 / prodLycraDenierFor(row), prodNum(row.stitchLength));
+  if (prodHasFilament()) addTerm(5315 / prodFilamentDenierFor(row), prodFilamentSlFor(row));
   if (!Number.isFinite(coeff) || coeff <= 0) return NaN;
   return coeff * counter;
 }
@@ -1264,6 +1320,7 @@ function renderProductionCalculation() {
   const factorInput = $("#prodFactor");
   if (factorInput) factorInput.value = prodFactor();
   prodRenderFactorNote();
+  prodRenderExtraToggles();
   const ratioRow = $("#prodRatioRow");
   if (ratioRow) ratioRow.classList.toggle("hidden", prodCalc.fabric !== "Rib (Custom Ratio)");
   const ratio = prodRatio();
@@ -1287,6 +1344,33 @@ function renderProductionCalculation() {
     renderProdReverse();
   }
 }
+// The Lycra and Filament buttons switch an extra row below every machine
+// of the current fabric on or off. For a fabric whose name already has
+// "Lycra" the lycra row is always on, so its button is disabled.
+function prodToggleExtra(kind) {
+  if (kind === "lycra" && prodCalc.fabric.includes("Lycra")) return;
+  if (!prodCalc.extras) prodCalc.extras = {};
+  const cur = prodCalc.extras[prodCalc.fabric] || {};
+  cur[kind] = !cur[kind];
+  prodCalc.extras[prodCalc.fabric] = cur;
+  saveProdCalc();
+  prodRenderExtraToggles();
+  renderProdTable();
+  renderProdReverse();
+}
+function prodRenderExtraToggles() {
+  const lycraBtn = $("#prodLycraToggle"), filBtn = $("#prodFilamentToggle");
+  const hasLycra = prodHasLycra(), hasFil = prodHasFilament();
+  if (lycraBtn) {
+    lycraBtn.setAttribute("aria-pressed", String(hasLycra));
+    lycraBtn.classList.toggle("active", hasLycra);
+    lycraBtn.disabled = prodCalc.fabric.includes("Lycra");
+  }
+  if (filBtn) {
+    filBtn.setAttribute("aria-pressed", String(hasFil));
+    filBtn.classList.toggle("active", hasFil);
+  }
+}
 function renderProdTable() {
   const headRow = $("#prodTableHeadRow");
   if (headRow) headRow.innerHTML = prodColumns().map((c) => `<th>${prodEsc(c.label)}</th>`).join("") + `<th>Production / Shift (kg)</th><th></th>`;
@@ -1294,7 +1378,8 @@ function renderProdTable() {
   if (!body) return;
   const rows = prodRows();
   const columns = prodColumns();
-  const isLycra = prodCalc.fabric.includes("Lycra");
+  const isLycra = prodHasLycra();
+  const hasFilament = prodHasFilament();
   body.innerHTML = rows.map((row, i) => {
     const main = `
     <tr data-row="${i}">
@@ -1323,9 +1408,10 @@ function renderProdTable() {
       <td></td>
       <td></td>
     </tr>`).join("");
-    if (!isLycra) return main + yarnRows;
-    const denier = prodLycraDenierFor(row);
-    const lycra = `
+    let extra = "";
+    if (isLycra) {
+      const denier = prodLycraDenierFor(row);
+      extra += `
     <tr class="prod-lycra-table-row" data-lycra-row="${i}">
       ${columns.map((c) => {
         if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
@@ -1336,13 +1422,31 @@ function renderProdTable() {
       <td></td>
       <td></td>
     </tr>`;
-    return main + yarnRows + lycra;
+    }
+    if (hasFilament) {
+      const fDenier = prodFilamentDenierFor(row);
+      const fSl = prodFilamentSlFor(row);
+      extra += `
+    <tr class="prod-filament-table-row" data-filament-row="${i}">
+      ${columns.map((c) => {
+        if (c.key === "machine") return `<td class="prod-filament-label">${prodEsc(row.machine ?? i + 1)} · Filament</td>`;
+        if (c.key === "count") return `<td><input data-field="filamentDenier" type="number" min="0" step="any" value="${fDenier}" placeholder="Denier"><div class="prod-filament-count">= ${prodFmt(5315 / fDenier, 2)} Ne</div></td>`;
+        if (c.key === "stitchLength") return `<td><input data-field="filamentSl" type="number" min="0" step="any" value="${fSl}"></td>`;
+        if (c.key) return `<td class="prod-filament-mirror" data-mirror="${c.key}">${prodEsc(c.key === "needles" ? prodNeedlesText(row) : (row[c.key] ?? ""))}</td>`;
+        return `<td class="prod-filament-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
+      }).join("")}
+      <td></td>
+      <td></td>
+    </tr>`;
+    }
+    return main + yarnRows + extra;
   }).join("");
   prodUpdateTotals();
 }
 function prodUpdateTotals() {
   const rows = prodRows();
   prodUpdateLycraTotals();
+  prodUpdateFilamentTotals();
   prodUpdateYarnTotals();
   const total = rows.reduce((sum, row) => sum + (prodRowProduction(row) || 0), 0);
   const totalEl = $("#prodTotal");
@@ -1362,6 +1466,7 @@ function prodRecalcRow(i) {
     if (needleInput) needleInput.value = prodNeedlesText(row);
   }
   prodUpdateLycraRow(i);
+  prodUpdateFilamentRow(i);
   prodUpdateYarnRow(i);
   prodUpdateTotals();
   prodUpdateReverseResults();
@@ -1455,6 +1560,10 @@ function prodDownloadTemplate() {
   yarnSpec.forEach((y) => {
     header.push(y.kind === "Denier" ? `${y.label} Denier (D)` : `${y.label} Count (Ne)`, `${y.label} Stitch Length (mm)`);
   });
+  // A Lycra or Filament row switched on for this fabric gets its own
+  // columns, so the values round-trip through upload and download.
+  if (prodHasLycra()) header.push("Lycra Denier (D)");
+  if (prodHasFilament()) header.push("Filament Denier (D)", "Filament Stitch Length (mm)");
   const ws = window.XLSX.utils.aoa_to_sheet([header]);
   ws["!cols"] = header.map(() => ({ wch: 18 }));
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
@@ -1468,6 +1577,7 @@ function prodDownloadTemplate() {
     ["Needles is the total needle count (dial + cylinder). You can leave it blank — ZBOM works it out from Dia x Gauge x factor — or type your own needle count (for example for a 2x2 rib with fewer needles). If you type Needles, Dia and Gauge can be left blank."],
     ["You can add your own columns after these input columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file."],
     ["For Lycra fabrics, a Lycra row appears below each machine in the app — enter the denier there (for example 40); the lycra count and production are calculated automatically."],
+    ["The Lycra and Filament buttons add the same rows below each machine of any other fabric (for example Rib). When a button is on, its denier column is in the template; a Filament row also has its own Stitch Length column."],
     ["For multi-yarn fabrics (Fleece, 2/3 Thread Fleece, French Terry, Terry Velour, Lycra Fleece, Polar Fleece), each extra yarn has its own Count + Stitch Length columns in the template — their productions add to the machine's total."],
     ["Save the file, then upload it with the Upload button in Production Calculation."],
   ]);
@@ -1482,9 +1592,12 @@ function prodExportExcel() {
   if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
   const values = rows.map((row) => ({ row, p: prodRowProduction(row) }));
   const total = values.reduce((s, v) => s + (v.p || 0), 0);
-  const isLycra = prodCalc.fabric.includes("Lycra");
+  const isLycra = prodHasLycra();
   const lycraValues = isLycra ? values.map(({ row }) => prodLycraPerShift(row)) : [];
   const lycraTotal = lycraValues.reduce((s, v) => s + (v || 0), 0);
+  const hasFilament = prodHasFilament();
+  const filamentValues = hasFilament ? values.map(({ row }) => prodFilamentPerShift(row)) : [];
+  const filamentTotal = filamentValues.reduce((s, v) => s + (v || 0), 0);
   // Multi-yarn fabrics: one Count/Denier + Stitch Length + Production
   // column per extra yarn, after the combined Production column.
   const yarnSpec = (PROD_MULTI_YARN[prodCalc.fabric] || {}).extra || [];
@@ -1501,7 +1614,7 @@ function prodExportExcel() {
     if (c.key === "needles") { const n = prodNeedlesFor(row); return Number.isFinite(n) ? n : ""; }
     return c.key ? prodNum(row[c.key]) : (row.extra && row.extra[c.label] != null ? row.extra[c.label] : "");
   };
-  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...yarnHeader, ...(isLycra ? ["Lycra Denier (D)", "Lycra Production (kg)"] : [])];
+  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...yarnHeader, ...(isLycra ? ["Lycra Denier (D)", "Lycra Production (kg)"] : []), ...(hasFilament ? ["Filament Denier (D)", "Filament Stitch Length (mm)", "Filament Production (kg)"] : [])];
   const data = values.map(({ row, p }, i) => [
     ...columns.map((c) => prodCell(row, c)),
     Number.isFinite(p) ? Number(p.toFixed(2)) : "",
@@ -1511,14 +1624,15 @@ function prodExportExcel() {
       return [cnt, Number.isFinite(yv.sl) ? Number(yv.sl.toFixed(2)) : "", Number.isFinite(yarnProd[i][j]) ? Number(yarnProd[i][j].toFixed(2)) : ""];
     }),
     ...(isLycra ? [prodLycraDenierFor(row), Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
+    ...(hasFilament ? [prodFilamentDenierFor(row), Number.isFinite(prodFilamentSlFor(row)) ? Number(prodFilamentSlFor(row).toFixed(2)) : "", Number.isFinite(filamentValues[i]) ? Number(filamentValues[i].toFixed(2)) : ""] : []),
   ]);
   const totalRow = columns.map((c, i) => i === 0 ? "Total" : "");
-  totalRow.push(Number(total.toFixed(2)), ...yarnSpec.flatMap((y, j) => ["", "", Number(yarnTotals[j].toFixed(2))]), ...(isLycra ? ["", Number(lycraTotal.toFixed(2))] : []));
+  totalRow.push(Number(total.toFixed(2)), ...yarnSpec.flatMap((y, j) => ["", "", Number(yarnTotals[j].toFixed(2))]), ...(isLycra ? ["", Number(lycraTotal.toFixed(2))] : []), ...(hasFilament ? ["", "", Number(filamentTotal.toFixed(2))] : []));
   data.push(totalRow);
   const wb = window.XLSX.utils.book_new();
   const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
   const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, needles: 12, feeders: 14, rpm: 10 };
-  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...yarnSpec.flatMap(() => [{ wch: 16 }, { wch: 18 }, { wch: 20 }]), ...(isLycra ? [{ wch: 16 }, { wch: 20 }] : [])];
+  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...yarnSpec.flatMap(() => [{ wch: 16 }, { wch: 18 }, { wch: 20 }]), ...(isLycra ? [{ wch: 16 }, { wch: 20 }] : []), ...(hasFilament ? [{ wch: 16 }, { wch: 18 }, { wch: 20 }] : [])];
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const prodData = [
     ["Fabric", prodCalc.fabric],
@@ -1532,6 +1646,7 @@ function prodExportExcel() {
   ];
   yarnSpec.forEach((y, j) => prodData.push([`${y.label} production`, Number(yarnTotals[j].toFixed(2))]));
   if (isLycra) prodData.push(["Lycra production", Number(lycraTotal.toFixed(2))]);
+  if (hasFilament) prodData.push(["Filament production", Number(filamentTotal.toFixed(2))]);
   const ws2 = window.XLSX.utils.aoa_to_sheet(prodData);
   ws2["!cols"] = [{ wch: 18 }, { wch: 24 }];
   window.XLSX.utils.book_append_sheet(wb, ws2, "Production");
@@ -1553,8 +1668,10 @@ function prodFindColumn(headers, col) {
 // "Lycra Production (kg)") are never treated as extra columns, and the
 // "Total" row of a downloaded file is skipped silently — so a downloaded
 // file can be uploaded again unchanged.
-const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)"];
+const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)", "filament production (kg)"];
 const PROD_LYCRA_DENIER_ALIASES = ["lycra denier (d)", "lycra denier", "denier"];
+const PROD_FILAMENT_DENIER_ALIASES = ["filament denier (d)", "filament denier", "filament"];
+const PROD_FILAMENT_SL_ALIASES = ["filament stitch length (mm)", "filament stitch length", "filament s/l"];
 function prodParseImport(workbook) {
   const sheetName = workbook.SheetNames.includes("Machines") ? "Machines" : workbook.SheetNames[0];
   const ws = workbook.Sheets[sheetName];
@@ -1597,6 +1714,8 @@ function prodParseImport(workbook) {
   const columns = [];
   const extraCols = [];
   let denierIdx = -1;
+  let filamentDenierIdx = -1;
+  let filamentSlIdx = -1;
   headers.forEach((h, i) => {
     const col = PROD_IMPORT_COLUMNS.find((c) => colIndex[c.key] === i);
     if (col) { columns.push({ key: col.key, label: col.label }); return; }
@@ -1605,6 +1724,8 @@ function prodParseImport(workbook) {
     if (yarnHeaderIdx.has(i) || yarnProductionLabels.has(low)) return;
     if (!low || PROD_COMPUTED_COLUMN_LABELS.includes(low) || knownLabels.has(low)) return;
     if (PROD_LYCRA_DENIER_ALIASES.includes(low)) { if (denierIdx < 0) denierIdx = i; return; }
+    if (PROD_FILAMENT_DENIER_ALIASES.includes(low)) { if (filamentDenierIdx < 0) filamentDenierIdx = i; return; }
+    if (PROD_FILAMENT_SL_ALIASES.includes(low)) { if (filamentSlIdx < 0) filamentSlIdx = i; return; }
     if (extraCols.some((e) => e.label.toLowerCase() === low)) return;
     columns.push({ key: null, label: h });
     extraCols.push({ label: h, index: i });
@@ -1657,15 +1778,22 @@ function prodParseImport(workbook) {
         else { entry.sl = v; yarnSet = true; }
       }
     });
+    const filamentDenier = filamentDenierIdx >= 0 ? prodNum(line[filamentDenierIdx]) : NaN;
+    const filamentSl = filamentSlIdx >= 0 ? prodNum(line[filamentSlIdx]) : NaN;
+    if (filamentDenierIdx >= 0 && line[filamentDenierIdx] !== "" && line[filamentDenierIdx] != null && (!Number.isFinite(filamentDenier) || filamentDenier <= 0)) rowProblems.push("Filament Denier must be a number greater than 0");
+    if (filamentSlIdx >= 0 && line[filamentSlIdx] !== "" && line[filamentSlIdx] != null && (!Number.isFinite(filamentSl) || filamentSl <= 0)) rowProblems.push("Filament Stitch Length must be a number greater than 0");
     // The Total row of a file ZBOM downloaded is not a machine.
     if (rowProblems.length && String(machine ?? "").trim().toLowerCase() === "total"
       && ["count", "stitchLength", "dia", "gauge", "feeders", "rpm"].every((key) => { const v = get(key); return v === "" || v === null || v === undefined; })
-      && (needlesIdx < 0 || line[needlesIdx] === "" || line[needlesIdx] == null)) continue;
+      && (needlesIdx < 0 || line[needlesIdx] === "" || line[needlesIdx] == null)
+      && (denierIdx < 0 || line[denierIdx] === "" || line[denierIdx] == null)
+      && (filamentDenierIdx < 0 || line[filamentDenierIdx] === "" || line[filamentDenierIdx] == null)
+      && (filamentSlIdx < 0 || line[filamentSlIdx] === "" || line[filamentSlIdx] == null)) continue;
     if (rowProblems.length) { problems.push({ row: sheetRow, message: rowProblems.join("; ") }); continue; }
     const extra = {};
     extraCols.forEach(({ label, index }) => { const v = line[index]; if (v !== "" && v !== null && v !== undefined) extra[label] = v; });
     const lycraDenier = denierIdx >= 0 ? prodNum(line[denierIdx]) : NaN;
-    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia ?? "", gauge: vals.gauge ?? "", feeders: vals.feeders, rpm: vals.rpm, ...(hasNeedles ? { needles: vals.needles } : {}), ...(Object.keys(extra).length ? { extra } : {}), ...(Number.isFinite(lycraDenier) && lycraDenier > 0 ? { lycraDenier } : {}), ...(yarnSet ? { yarns } : {}) });
+    rows.push({ machine: String(machine), count: vals.count, stitchLength: vals.stitchLength, dia: vals.dia ?? "", gauge: vals.gauge ?? "", feeders: vals.feeders, rpm: vals.rpm, ...(hasNeedles ? { needles: vals.needles } : {}), ...(Object.keys(extra).length ? { extra } : {}), ...(Number.isFinite(lycraDenier) && lycraDenier > 0 ? { lycraDenier } : {}), ...(Number.isFinite(filamentDenier) && filamentDenier > 0 ? { filamentDenier } : {}), ...(Number.isFinite(filamentSl) && filamentSl > 0 ? { filamentSl } : {}), ...(yarnSet ? { yarns } : {}) });
   }
   return { rows, problems, missing: [], columns };
 }
@@ -1697,7 +1825,15 @@ async function prodHandleUpload(file) {
     prodCalc.rows[prodCalc.fabric] = rows;
     if (!prodCalc.columns) prodCalc.columns = {};
     prodCalc.columns[prodCalc.fabric] = columns;
+    // If the file carries a Lycra or Filament value, switch that row on for
+    // this fabric — otherwise the imported values would stay invisible.
+    if (!prodCalc.extras) prodCalc.extras = {};
+    const uploadedExtras = prodCalc.extras[prodCalc.fabric] || {};
+    if (rows.some((r) => Number.isFinite(prodNum(r.lycraDenier)) && prodNum(r.lycraDenier) > 0)) uploadedExtras.lycra = true;
+    if (rows.some((r) => (Number.isFinite(prodNum(r.filamentDenier)) && prodNum(r.filamentDenier) > 0) || (Number.isFinite(prodNum(r.filamentSl)) && prodNum(r.filamentSl) > 0))) uploadedExtras.filament = true;
+    prodCalc.extras[prodCalc.fabric] = uploadedExtras;
     saveProdCalc();
+    prodRenderExtraToggles();
     renderProdTable();
     renderProdReverse();
     const extraNames = (columns || []).filter((c) => !c.key).map((c) => c.label);
@@ -4164,9 +4300,10 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   const input = event.target.closest("input[data-field]");
   if (!input) return;
   // The Lycra row below a machine has data-lycra-row instead of data-row,
-  // and a yarn row has data-yarn-row + data-yarn-idx.
-  const tr = input.closest("tr[data-row]") || input.closest("tr[data-lycra-row]") || input.closest("tr[data-yarn-row]");
-  const idx = Number(tr?.dataset.row ?? tr?.dataset.lycraRow ?? tr?.dataset.yarnRow);
+  // a filament row has data-filament-row, and a yarn row has
+  // data-yarn-row + data-yarn-idx.
+  const tr = input.closest("tr[data-row]") || input.closest("tr[data-lycra-row]") || input.closest("tr[data-filament-row]") || input.closest("tr[data-yarn-row]");
+  const idx = Number(tr?.dataset.row ?? tr?.dataset.lycraRow ?? tr?.dataset.filamentRow ?? tr?.dataset.yarnRow);
   const row = prodRows()[idx];
   if (!row) return;
   if (tr?.dataset.yarnIdx !== undefined) {
@@ -4209,6 +4346,8 @@ $("#prodKeepFirst")?.addEventListener("click", () => {
   showNotice(`Kept only the first machine — deleted ${removed} machine${removed === 1 ? "" : "s"}.`, "success");
 });
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
+$("#prodLycraToggle")?.addEventListener("click", () => prodToggleExtra("lycra"));
+$("#prodFilamentToggle")?.addEventListener("click", () => prodToggleExtra("filament"));
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
 $("#prodAddFabricClose")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.add("hidden"); });
 $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.add("hidden"); });
