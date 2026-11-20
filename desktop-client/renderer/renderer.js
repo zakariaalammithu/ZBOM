@@ -1905,33 +1905,32 @@ async function prodHandleUpload(file) {
 const FLEECE_STORAGE_KEY = "zbom-fleece-calculation-v1";
 const FLEECE_BUILTIN_TYPES = [
   { value: "twoThread", label: "2 Thread" },
-  { value: "twoThreadNoPoly", label: "2 Thread - without Polyester" },
-  { value: "threeThreadPoly", label: "3 Thread - with Polyester" },
-  { value: "fourThread", label: "4 Thread - Cotton Count (Ne)" },
-  { value: "fleece", label: "Fleece" },
-  { value: "twoThreadFleece", label: "Two Thread Fleece" },
-  { value: "threeThreadFleece", label: "Three Thread Fleece" },
-  { value: "frenchTerry", label: "French Terry" },
-  { value: "terryVelour", label: "Terry Velour" },
-  { value: "plaited", label: "Plaited Fabric" },
-  { value: "lycraFleece", label: "Lycra Fleece" },
   { value: "design", label: "Design" },
-  { value: "lycraDesign", label: "Lycra Design" },
+  { value: "threeThread", label: "3 Thread" },
+  { value: "threeThreadFleece", label: "3 Thread Fleece" },
+  { value: "fleece", label: "Fleece" },
+  { value: "fourThread", label: "4 Thread" },
 ];
+// Fabrics removed in the 2026-11-21 consolidation (13 -> 6). A saved
+// fabric of a removed type opens the entry that does its work; the saved
+// yarn rows stay in localStorage and are not deleted.
+const FLEECE_REMOVED_FABRIC_FALLBACK = {
+  twoThreadFleece: "twoThread",
+  frenchTerry: "twoThread",
+  terryVelour: "twoThread",
+  plaited: "twoThread",
+  lycraDesign: "design",
+  twoThreadNoPoly: "threeThread",
+  threeThreadPoly: "threeThreadFleece",
+  lycraFleece: "threeThreadFleece",
+};
 const FLEECE_TYPE_SUBTITLES = {
-  twoThread: "Plain + Loop — cotton and polyester.",
-  twoThreadNoPoly: "Plain + Binding + Loop — all cotton, no polyester.",
-  threeThreadPoly: "Plain + Filament Binding + Loop.",
-  fourThread: "Four yarns — cotton count (Ne), including Lycra.",
+  twoThread: "Two yarns (Ne + Ne) — covers 2 Thread, Two Thread Fleece, French Terry, Terry Velour and Plaited. Edit the counts for your fabric.",
+  design: "Plated rib design — Face + Back, two yarns plated together. Use the Lycra button for Lycra Design.",
+  threeThread: "Three yarns (Ne + Ne + Denier) — Plain + Binding + Loop, all cotton.",
+  threeThreadFleece: "Three-thread fleece, filament used — Face + Filament Binder + Back. Covers 3 Thread with Polyester. Use the Lycra button for Lycra Fleece.",
   fleece: "Three-thread fleece, filament not used — Face + Binder + Back. The Binder count follows the Face count, as in the sheet.",
-  twoThreadFleece: "Two-thread fleece — Face + Back.",
-  threeThreadFleece: "Three-thread fleece, filament used — Face + Filament Binder + Back.",
-  frenchTerry: "Two-thread terry — Face + Loop (loops left uncut).",
-  terryVelour: "Two-thread terry, loops sheared — Ground + Pile.",
-  plaited: "Two yarns plated together — Face + Back, one yarn on each side.",
-  lycraFleece: "Three-thread fleece with lycra — Face + Filament Binder + Back + Lycra.",
-  design: "Plated rib design — Face + Back, two yarns plated together.",
-  lycraDesign: "Plated rib design with lycra — Face + Back + Lycra, three yarns plated together.",
+  fourThread: "Four yarns — cotton count (Ne), including Lycra.",
 };
 const FLEECE_SUGGESTED_FABRICS = ["Interlock"];
 const FLEECE_MAX_YARNS = 8;
@@ -1949,34 +1948,25 @@ const FLEECE_SAMPLE_YARNS = [
 // (Declared before `fleeceCalc` loads, so the migration can use it.)
 const FLEECE_LEGACY_YARN_LABELS = {
   twoThread: ["40/1 CC", "75D/36 Poly"],
-  twoThreadNoPoly: ["40/1 CC", "75D/36 Poly", "40D Lycra"],
-  threeThreadPoly: ["26/1 CC", "75D/36 Poly", "10/1 Kh"],
+  threeThread: ["40/1 CC", "75D/36 Poly", "40D Lycra"],
   fourThread: ["30/1 CB", "34/1 PV", "10/1 CD", "70D Lycra"],
   fleece: ["30/1 CC", "30/1 CC", "10/1 Kh"],
-  twoThreadFleece: ["8/1 CC", "10/1 CC"],
   threeThreadFleece: ["24/1 CC", "75D/36 Poly", "10/1 CC"],
-  frenchTerry: ["24/1 CC", "20/1 CC"],
-  terryVelour: ["30/1 CC", "20/1 CC"],
-  plaited: ["30/1 CC", "30/1 CC"],
-  lycraFleece: ["24/1", "75D/36 Poly", "10/1", "40D Lycra"],
   design: ["28/1", "50D/36 FILA (NIM)"],
-  lycraDesign: ["28/1", "50D/36 FILA (NIM)", "40D Lycra"],
 };
 // The file labels these descriptions replaced (2026-11-17 and before).
 // A saved row still carrying one of them is blanked on load, so the
 // new description shows lightly instead.
 const FLEECE_OLD_YARN_LABELS = {
   twoThread: ["40/1 CB", "50D Poly"],
-  twoThreadNoPoly: ["40", "75", "40D"],
-  threeThreadPoly: ["26/1 Ring KH CVC", "75D Poly", "10/1 Kh"],
+  threeThread: ["40", "75", "40D"],
   fourThread: ["30/1 CB", "34/1 PV", "10/1 CD", "70D Lycra"],
   threeThreadFleece: [null, "75D Poly", null],
-  lycraFleece: [null, "75D Poly", null, "40D Lycra"],
 };
 // The four file types used to default to their file quantities.
 // A saved qty that still equals the old file quantity is reset to
 // 100 KG on load (the new default for every fabric).
-const FLEECE_OLD_FABRIC_QTY = { twoThread: 23, twoThreadNoPoly: 325, threeThreadPoly: 1000, fourThread: 3000 };
+const FLEECE_OLD_FABRIC_QTY = { twoThread: 23, fourThread: 3000 };
 function fleeceYarnPlaceholder(y, i, data) {
   const legacy = FLEECE_LEGACY_YARN_LABELS[fleeceCalc.type];
   const hint = (legacy && legacy[i]) || fleeceYarnLabel(y, data);
@@ -1990,15 +1980,10 @@ function fleeceBuiltinDefaults() {
       { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
       { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 46, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 0.9 },
     ]},
-    twoThreadNoPoly: { fabricQty: 100, lycraFactor: null, yarns: [
+    threeThread: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.35 },
       { label: "Binding (Ne)", yarn: "", kind: "Ne", count: 75, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.25 },
       { label: "Loop", yarn: "", kind: "Denier", denier: 40, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 0.6 },
-    ]},
-    threeThreadPoly: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Plain (Ne)", yarn: "", kind: "Ne", count: 26, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.55 },
-      { label: "Binding (ND)", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 1.35 },
-      { label: "Loop (Ne)", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.45 },
     ]},
     fourThread: { fabricQty: 100, lycraFactor: 60, yarns: [
       { label: "Yarn-1", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.5 },
@@ -2011,41 +1996,14 @@ function fleeceBuiltinDefaults() {
       { label: "Binder", yarn: "", kind: "Mirror", mirror: 0, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 3.85 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 5, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.95 },
     ]},
-    twoThreadFleece: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Face Loop", yarn: "", kind: "Ne", count: 8, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 5 },
-      { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2 },
-    ]},
     threeThreadFleece: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
       { label: "Binder — Filament", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
       { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
     ]},
-    frenchTerry: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
-      { label: "Loop", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
-    ]},
-    terryVelour: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Ground", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
-      { label: "Pile", yarn: "", kind: "Ne", count: 20, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.4 },
-    ]},
-    plaited: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Face", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
-      { label: "Back", yarn: "", kind: "Ne", count: 30, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
-    ]},
-    lycraFleece: { fabricQty: 100, lycraFactor: 60, yarns: [
-      { label: "Face Loop", yarn: "", kind: "Ne", count: 24, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 4.4 },
-      { label: "Binder — Filament", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 },
-      { label: "Back Loop", yarn: "", kind: "Ne", count: 10, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 1.6 },
-      { label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
-    ]},
     design: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Back", yarn: "", kind: "Denier", denier: 50, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
-    ]},
-    lycraDesign: { fabricQty: 100, lycraFactor: null, yarns: [
-      { label: "Face", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
-      { label: "Back", yarn: "", kind: "Denier", denier: 50, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
-      { label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 },
     ]},
   };
 }
@@ -2120,6 +2078,7 @@ function loadFleeceCalc() {
     merged.addedFabrics.forEach((name) => {
       if (merged.data[name] && merged.data[name].fabricQty === "") merged.data[name].fabricQty = 100;
     });
+    if (FLEECE_REMOVED_FABRIC_FALLBACK[merged.type]) merged.type = FLEECE_REMOVED_FABRIC_FALLBACK[merged.type];
     if (![...FLEECE_BUILTIN_TYPES.map((t) => t.value), ...merged.addedFabrics].includes(merged.type)) merged.type = base.type;
     return merged;
   } catch (e) {
@@ -2600,6 +2559,11 @@ function renderFleeceMain() {
   if (qtyInput) qtyInput.value = data && data.fabricQty !== undefined && data.fabricQty !== null ? data.fabricQty : "";
   const addBtn = $("#fleeceAddYarn");
   if (addBtn) addBtn.disabled = yarns.length >= FLEECE_MAX_YARNS;
+  const lycraBtn = $("#fleeceLycraToggle");
+  if (lycraBtn) {
+    lycraBtn.setAttribute("aria-pressed", String(yarns.some((y) => y.kind === "Lycra")));
+    lycraBtn.disabled = yarns.length >= FLEECE_MAX_YARNS && !yarns.some((y) => y.kind === "Lycra");
+  }
   fleeceRecalcMain();
 }
 // Updates only the calculated cells — never rebuilds the inputs, so typing
@@ -2670,6 +2634,23 @@ function fleeceRemoveYarn(index) {
   renderFleeceMain();
 }
 
+// The Lycra button adds (or removes) a Lycra yarn row (40D, SL 0.75,
+// Others 100%) below the current fabric's yarns — so Lycra Fleece and
+// Lycra Design are done from 3 Thread Fleece and Design instead of
+// being separate fabric names.
+function fleeceToggleLycra() {
+  const data = fleeceCurrentData();
+  if (!data) return;
+  const idx = data.yarns.findIndex((y) => y.kind === "Lycra");
+  if (idx >= 0) {
+    data.yarns.splice(idx, 1);
+  } else {
+    if (data.yarns.length >= FLEECE_MAX_YARNS) return;
+    data.yarns.push(fleeceNormalizeYarn({ label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 }));
+  }
+  saveFleeceCalc();
+  renderFleeceMain();
+}
 function renderDiaWiseSummary() {
   const source = state.snapshot.diaWiseSummary || [];
   const term = normalizedSearchText($("#diaSummarySearch")?.value || "");
@@ -4545,6 +4526,7 @@ window.addEventListener("beforeprint", () => {
   if (host) host.innerHTML = fleeceReportHTML();
 });
 $("#fleeceAddYarn")?.addEventListener("click", fleeceAddYarn);
+$("#fleeceLycraToggle")?.addEventListener("click", fleeceToggleLycra);
 $("#fleeceFabricQty")?.addEventListener("input", (event) => {
   const data = fleeceCurrentData();
   if (!data) return;
