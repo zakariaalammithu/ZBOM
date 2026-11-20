@@ -960,8 +960,6 @@ function prodDefaultState() {
     fabric: "Single Jersey",
     shiftHours: 24,
     efficiency: 85,
-    targetProduction: 10,
-    counterInput: 1100,
     addedFabrics: [],
     factors: {},
     ratios: {},
@@ -1289,37 +1287,6 @@ function prodUpdateYarnTotals() {
   el.textContent = parts.join(" · ");
 }
 
-// Counter conversions, generalised to multi-yarn machines: production from
-// a counter is the counter times the sum over ALL yarns (main + extra +
-// lycra + filament) of (Needles x SL_yarn x Feeders) /
-// (25.4 x 36 x 840 x Count_yarn x 2.2046) — the same sum prodRowProduction
-// uses, without the shift-hours and efficiency (theoretical, as in the
-// sheet). Counter from production is the target divided by that sum.
-// Single-yarn fabrics give exactly the old values.
-function prodProductionFromCounter(row, counter) {
-  const needles = prodNeedlesFor(row), feeders = prodNum(row.feeders);
-  if ([needles, feeders].some((v) => !Number.isFinite(v) || v <= 0) || !Number.isFinite(counter) || counter < 0) return NaN;
-  const denom = PROD_MM_PER_INCH * PROD_INCH_PER_YARD * PROD_YARDS_PER_HANK * PROD_LB_PER_KG;
-  let coeff = 0;
-  // Each yarn can have its own stitch length, needle count and feeder
-  // count (the Lycra / Filament rows do) — so a term carries all three.
-  const addTerm = (count, sl, n, f) => {
-    if (!Number.isFinite(count) || count <= 0 || !Number.isFinite(sl) || sl <= 0 || !Number.isFinite(n) || n <= 0 || !Number.isFinite(f) || f <= 0) { coeff = NaN; return; }
-    coeff += (n * sl * f) / (denom * count);
-  };
-  addTerm(prodNum(row.count), prodNum(row.stitchLength), needles, feeders);
-  prodYarnValues(row).forEach((yv) => addTerm(yv.count, yv.sl, needles, feeders));
-  if (prodHasLycra()) addTerm(5315 / prodLycraDenierFor(row), prodLycraSlFor(row), prodLycraNeedlesFor(row), prodLycraFeedersFor(row));
-  if (prodHasFilament()) addTerm(5315 / prodFilamentDenierFor(row), prodFilamentSlFor(row), prodFilamentNeedlesFor(row), prodFilamentFeedersFor(row));
-  if (!Number.isFinite(coeff) || coeff <= 0) return NaN;
-  return coeff * counter;
-}
-function prodCounterFromProduction(row, kg) {
-  if (!Number.isFinite(kg) || kg < 0) return NaN;
-  const perRev = prodProductionFromCounter(row, 1);
-  if (!Number.isFinite(perRev) || perRev <= 0) return NaN;
-  return kg / perRev;
-}
 function prodFmt(value, decimals = 2) {
   return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "—";
 }
@@ -1363,7 +1330,6 @@ function renderProductionCalculation() {
   }
   if (ready) {
     renderProdTable();
-    renderProdReverse();
   }
 }
 // The Lycra and Filament buttons switch an extra row below every machine
@@ -1378,7 +1344,6 @@ function prodToggleExtra(kind) {
   saveProdCalc();
   prodRenderExtraToggles();
   renderProdTable();
-  renderProdReverse();
 }
 function prodRenderExtraToggles() {
   const lycraBtn = $("#prodLycraToggle"), filBtn = $("#prodFilamentToggle");
@@ -1496,39 +1461,6 @@ function prodRecalcRow(i) {
   prodUpdateFilamentRow(i);
   prodUpdateYarnRow(i);
   prodUpdateTotals();
-  prodUpdateReverseResults();
-}
-function prodReverseRow(selectId) {
-  const select = $(selectId);
-  const idx = select ? parseInt(select.value, 10) : 0;
-  return prodRows()[Number.isFinite(idx) ? idx : 0];
-}
-function renderProdReverse() {
-  const rows = prodRows();
-  ["#prodCounterMachine", "#prodProductionMachine"].forEach((id) => {
-    const select = $(id);
-    if (!select) return;
-    const prev = select.value;
-    select.innerHTML = rows.map((row, i) => `<option value="${i}">M/C ${prodEsc(row.machine ?? i + 1)}</option>`).join("");
-    select.value = prev && rows[+prev] ? prev : "0";
-  });
-  prodUpdateReverseResults();
-}
-function prodUpdateReverseResults() {
-  const kg = prodNum($("#prodTargetProduction")?.value);
-  const counter = prodNum($("#prodCounterInput")?.value);
-  const cRow = prodReverseRow("#prodCounterMachine");
-  const pRow = prodReverseRow("#prodProductionMachine");
-  const cResult = $("#prodCounterResult");
-  if (cResult && cRow) {
-    const v = prodCounterFromProduction(cRow, Number.isFinite(kg) ? kg : prodCalc.targetProduction);
-    cResult.textContent = Number.isFinite(v) ? `${prodFmt(v, 0)} rev` : "—";
-  }
-  const pResult = $("#prodProductionResult");
-  if (pResult && pRow) {
-    const v = prodProductionFromCounter(pRow, Number.isFinite(counter) ? counter : prodCalc.counterInput);
-    pResult.textContent = Number.isFinite(v) ? `${prodFmt(v)} kg` : "—";
-  }
 }
 function prodAddFabric(name) {
   const clean = String(name || "").trim();
@@ -1894,7 +1826,6 @@ async function prodHandleUpload(file) {
     saveProdCalc();
     prodRenderExtraToggles();
     renderProdTable();
-    renderProdReverse();
     const extraNames = (columns || []).filter((c) => !c.key).map((c) => c.label);
     const ok = `<p class="prod-import-ok">Imported <b>${rows.length}</b> machine${rows.length === 1 ? "" : "s"} into <b>${prodEsc(prodCalc.fabric)}</b> from <b>${prodEsc(file.name)}</b>${extraNames.length ? ` — kept ${extraNames.length} extra column${extraNames.length === 1 ? "" : "s"} (${extraNames.map(prodEsc).join(", ")}), they will be returned in the download.` : "."}</p>`;
     const bad = problems.length
@@ -4348,17 +4279,17 @@ $("#materialSearch")?.addEventListener("input", debounce(() => refreshFilteredTa
 $("#diaSummarySearch")?.addEventListener("input", debounce(renderDiaWiseSummary, 120));
 // Production Calculation listeners
 $("#prodFabricSelect")?.addEventListener("change", (event) => { prodCalc.fabric = event.target.value; saveProdCalc(); renderProductionCalculation(); });
-$("#prodShiftHours")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodShiftHours").value); if (Number.isFinite(v) && v > 0) { prodCalc.shiftHours = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
-$("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodEfficiency").value); if (Number.isFinite(v) && v > 0 && v <= 100) { prodCalc.efficiency = v; saveProdCalc(); renderProdTable(); renderProdReverse(); } }, 250));
-$("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; saveProdCalc(); prodRenderFactorNote(); renderProdTable(); renderProdReverse(); } }, 250));
+$("#prodShiftHours")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodShiftHours").value); if (Number.isFinite(v) && v > 0) { prodCalc.shiftHours = v; saveProdCalc(); renderProdTable(); } }, 250));
+$("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodEfficiency").value); if (Number.isFinite(v) && v > 0 && v <= 100) { prodCalc.efficiency = v; saveProdCalc(); renderProdTable(); } }, 250));
+$("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; saveProdCalc(); prodRenderFactorNote(); renderProdTable(); } }, 250));
 $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddFabricToggle")?.addEventListener("click", () => { $("#prodAddFabricPanel")?.classList.toggle("hidden"); $("#prodNewFabricName")?.focus(); });
 $("#prodAddFabricBtn")?.addEventListener("click", () => prodAddFabric($("#prodNewFabricName")?.value));
 $("#prodNewFabricName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") prodAddFabric(event.target.value); });
 $$("#prodAddFabricPanel [data-add-fabric]").forEach((btn) => btn.addEventListener("click", () => prodAddFabric(btn.dataset.addFabric)));
-$("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); renderProdReverse(); });
-$("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric] = [{ ...PROD_SAMPLE_ROW }]; saveProdCalc(); renderProdTable(); renderProdReverse(); });
+$("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
+$("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric] = [{ ...PROD_SAMPLE_ROW }]; saveProdCalc(); renderProdTable(); });
 $("#prodTableBody")?.addEventListener("input", (event) => {
   const input = event.target.closest("input[data-field]");
   if (!input) return;
@@ -4385,7 +4316,6 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   }
   saveProdCalc();
   prodRecalcRow(idx);
-  if (input.dataset.field === "machine") renderProdReverse();
 });
 $("#prodTableBody")?.addEventListener("click", (event) => {
   // The ✕ on a Lycra / Filament row removes that row for this fabric
@@ -4399,7 +4329,6 @@ $("#prodTableBody")?.addEventListener("click", (event) => {
   rows.splice(Number(btn.dataset.row), 1);
   saveProdCalc();
   renderProdTable();
-  renderProdReverse();
 });
 $("#prodKeepFirst")?.addEventListener("click", () => {
   const rows = prodRows();
@@ -4409,7 +4338,6 @@ $("#prodKeepFirst")?.addEventListener("click", () => {
   rows.splice(1);
   saveProdCalc();
   renderProdTable();
-  renderProdReverse();
   showNotice(`Kept only the first machine — deleted ${removed} machine${removed === 1 ? "" : "s"}.`, "success");
 });
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
@@ -4421,10 +4349,6 @@ $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.cl
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
 $("#prodUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
 $("#prodDownloadExcelBtn")?.addEventListener("click", prodExportExcel);
-$("#prodCounterMachine")?.addEventListener("change", prodUpdateReverseResults);
-$("#prodProductionMachine")?.addEventListener("change", prodUpdateReverseResults);
-$("#prodTargetProduction")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodTargetProduction").value); if (Number.isFinite(v)) { prodCalc.targetProduction = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
-$("#prodCounterInput")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodCounterInput").value); if (Number.isFinite(v)) { prodCalc.counterInput = v; saveProdCalc(); } prodUpdateReverseResults(); }, 200));
 // Yarn Calculation listeners (inputs are the yellow cells, as in the sheet)
 $("#fleeceTypeSelect")?.addEventListener("change", (event) => {
   fleeceCalc.type = event.target.value;

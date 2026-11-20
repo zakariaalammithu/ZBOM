@@ -463,10 +463,6 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-calc-actions{display:flex;gap:8px;align-items:center;margin:12px 0}
 .prod-total{margin-left:auto;font-size:11px;color:#354a5f}
 .prod-total b{font-size:14px;color:var(--deep)}
-.prod-reverse{grid-template-columns:repeat(2,1fr)}
-.prod-reverse label{display:grid;gap:4px;color:var(--muted);font-size:9px;font-weight:600;margin:10px 0}
-.prod-reverse select,.prod-reverse input{height:32px;border:1px solid #a8b3bd;padding:0 8px;font-size:11px}
-.prod-reverse b{display:block;font-size:19px;font-weight:400;margin:6px 0;color:var(--deep)}
 .prod-formula{margin-top:12px;color:var(--muted);font-size:9px;line-height:1.7}
 
 .fleece-panel{margin-bottom:12px}
