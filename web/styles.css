@@ -452,6 +452,11 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-input-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #prodImportReport p{font-size:10px;margin:8px 0 0;line-height:1.5}
 .prod-import-ok{color:#1e7a34}
+.fleece-upload-ok{color:#1e7a34}
+.fleece-upload-warn{color:#755d29}
+.fleece-upload-error{color:#b3261e}
+.fleece-upload-problems{margin:8px 0 0;padding-left:18px;font-size:10px;color:#755d29;max-height:180px;overflow:auto}
+.fleece-upload-problems li{margin:2px 0}
 .prod-import-warn{color:#755d29}
 .prod-import-error{color:#b3261e}
 .prod-import-problems{margin:8px 0 0;padding-left:18px;font-size:10px;color:#755d29;max-height:180px;overflow:auto}
