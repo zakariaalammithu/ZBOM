@@ -1906,6 +1906,7 @@ const FLEECE_STORAGE_KEY = "zbom-fleece-calculation-v1";
 const FLEECE_BUILTIN_TYPES = [
   { value: "twoThread", label: "2 Thread" },
   { value: "design", label: "Design" },
+  { value: "interlock", label: "Interlock" },
   { value: "threeThread", label: "3 Thread" },
   { value: "threeThreadFleece", label: "3 Thread Fleece" },
   { value: "fleece", label: "Fleece" },
@@ -1927,12 +1928,13 @@ const FLEECE_REMOVED_FABRIC_FALLBACK = {
 const FLEECE_TYPE_SUBTITLES = {
   twoThread: "Two yarns (Ne + Ne) — covers 2 Thread, Two Thread Fleece, French Terry, Terry Velour and Plaited. Edit the counts for your fabric.",
   design: "Plated rib design — Face + Back, two yarns plated together. Use the Lycra button for Lycra Design.",
+  interlock: "Double-bed interlock — Face + Back, two yarns. Edit the counts for your fabric.",
   threeThread: "Three yarns (Ne + Ne + Denier) — Plain + Binding + Loop, all cotton.",
   threeThreadFleece: "Three-thread fleece, filament used — Face + Filament Binder + Back. Covers 3 Thread with Polyester. Use the Lycra button for Lycra Fleece.",
   fleece: "Three-thread fleece, filament not used — Face + Binder + Back. The Binder count follows the Face count, as in the sheet.",
   fourThread: "Four yarns — cotton count (Ne), including Lycra.",
 };
-const FLEECE_SUGGESTED_FABRICS = ["Interlock"];
+const FLEECE_SUGGESTED_FABRICS = [];
 const FLEECE_MAX_YARNS = 8;
 const FLEECE_DENIER_CONSTANT = 5315;
 const FLEECE_SAMPLE_YARNS = [
@@ -2004,6 +2006,10 @@ function fleeceBuiltinDefaults() {
     design: { fabricQty: 100, lycraFactor: null, yarns: [
       { label: "Face", yarn: "", kind: "Ne", count: 28, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
       { label: "Back", yarn: "", kind: "Denier", denier: 50, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.8 },
+    ]},
+    interlock: { fabricQty: 100, lycraFactor: null, yarns: [
+      { label: "Face", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
+      { label: "Back", yarn: "", kind: "Ne", count: 30, cotton: 100, poly: 0, others: 0, feeder: 1, sl: 2.8 },
     ]},
   };
 }
