@@ -966,6 +966,7 @@ function prodDefaultState() {
     lycra: {},
     extras: {},
     columns: {},
+    machinePresets: [],
     rows: Object.fromEntries(PROD_BUILTIN_FABRICS.map((name) => [name, [{ ...PROD_SAMPLE_ROW }]])),
   };
 }
@@ -982,6 +983,7 @@ function loadProdCalc() {
     merged.lycra = { ...(parsed.lycra || {}) };
     merged.extras = { ...(parsed.extras || {}) };
     merged.columns = { ...(parsed.columns || {}) };
+    merged.machinePresets = Array.isArray(parsed.machinePresets) ? parsed.machinePresets.map(prodNormalizeMachinePreset).filter(Boolean) : [];
     PROD_BUILTIN_FABRICS.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     merged.addedFabrics.forEach((name) => { if (!Array.isArray(merged.rows[name]) || !merged.rows[name].length) merged.rows[name] = [{ ...PROD_SAMPLE_ROW }]; });
     if (PROD_REMOVED_FABRIC_FALLBACK[merged.fabric]) merged.fabric = PROD_REMOVED_FABRIC_FALLBACK[merged.fabric];
@@ -1478,6 +1480,76 @@ const PROD_IMPORT_COLUMNS = [
   { key: "feeders", label: "No of Feeder", match: ["no of feeder", "no. of feeder", "feeders", "feeder", "no of feeders"] },
   { key: "rpm", label: "RPM", match: ["rpm"] },
 ];
+// ---- Production Calculation: Machine presets ----
+// A machine is its Dia, Gauge, Needles, No of Feeder and RPM. Save a
+// machine once (yours, or any other company's) and reuse it for any
+// machine row, in any fabric — so the calculation works for any circular
+// knitting machine in the world, not just the ones with the sample
+// settings. Presets live in prodCalc (localStorage) and are not part of
+// the Excel template/export; the Excel file already carries each row's
+// machine settings.
+function prodNormalizeMachinePreset(p) {
+  if (!p || typeof p !== "object") return null;
+  const name = String(p.name || "").trim();
+  const dia = prodNum(p.dia), gauge = prodNum(p.gauge), needles = prodNum(p.needles), feeders = prodNum(p.feeders), rpm = prodNum(p.rpm);
+  if (!name) return null;
+  if (![dia, gauge, feeders, rpm].every((v) => Number.isFinite(v) && v > 0)) return null;
+  return { name, dia, gauge, needles: Number.isFinite(needles) && needles > 0 ? needles : "", feeders, rpm };
+}
+function prodRenderMachinePresets() {
+  const list = document.getElementById("prodMachinePresetList");
+  if (!list) return;
+  const presets = Array.isArray(prodCalc.machinePresets) ? prodCalc.machinePresets : [];
+  if (!presets.length) {
+    list.innerHTML = `<p class="prod-machine-empty">No machines saved yet. Set a machine row's Dia, Gauge, Needles, No of Feeder and RPM in the table, type a name above, and press "Save current machine".</p>`;
+    return;
+  }
+  list.innerHTML = presets.map((p, i) => {
+    const needles = p.needles !== "" && p.needles !== null && p.needles !== undefined ? ` · Needles ${p.needles}` : "";
+    return `<div class="prod-machine-preset"><b>${prodEsc(p.name)}</b><span>Dia ${p.dia} · Gauge ${p.gauge}${needles} · Feeder ${p.feeders} · RPM ${p.rpm}</span><button type="button" class="secondary" data-machine-apply="${i}">Add row</button><button type="button" class="secondary" data-machine-delete="${i}">Delete</button></div>`;
+  }).join("");
+}
+function prodSaveMachinePreset() {
+  const nameInput = document.getElementById("prodMachinePresetName");
+  const rows = prodRows();
+  const row = rows && rows[0];
+  if (!row) return;
+  const name = String(nameInput?.value || "").trim() || `${prodNum(row.dia) || "?"}in × ${prodNum(row.gauge) || "?"}G`;
+  const preset = prodNormalizeMachinePreset({ name, dia: row.dia, gauge: row.gauge, needles: row.needles, feeders: row.feeders, rpm: row.rpm });
+  const note = document.getElementById("prodMachineNote");
+  if (!preset) {
+    if (note) note.textContent = "Set Dia, Gauge, No of Feeder and RPM (numbers greater than 0) in the first machine row first.";
+    return;
+  }
+  if (!Array.isArray(prodCalc.machinePresets)) prodCalc.machinePresets = [];
+  const existing = prodCalc.machinePresets.findIndex((p) => p.name === preset.name);
+  if (existing >= 0) prodCalc.machinePresets[existing] = preset; else prodCalc.machinePresets.push(preset);
+  saveProdCalc();
+  if (nameInput) nameInput.value = "";
+  if (note) note.textContent = `"${preset.name}" saved.`;
+  prodRenderMachinePresets();
+}
+function prodApplyMachinePreset(index) {
+  const presets = Array.isArray(prodCalc.machinePresets) ? prodCalc.machinePresets : [];
+  const preset = presets[index];
+  if (!preset) return;
+  const rows = prodRows();
+  const first = rows && rows[0];
+  const base = first ? { count: first.count, stitchLength: first.stitchLength } : { count: PROD_SAMPLE_ROW.count, stitchLength: PROD_SAMPLE_ROW.stitchLength };
+  rows.push({ ...PROD_SAMPLE_ROW, ...base, machine: String(rows.length + 1), dia: preset.dia, gauge: preset.gauge, needles: preset.needles, feeders: preset.feeders, rpm: preset.rpm });
+  saveProdCalc();
+  renderProdTable();
+  showNotice(`Machine "${preset.name}" added as M/C ${rows.length}.`, "success");
+}
+function prodDeleteMachinePreset(index) {
+  if (!Array.isArray(prodCalc.machinePresets)) return;
+  const removed = prodCalc.machinePresets[index];
+  if (!removed) return;
+  prodCalc.machinePresets.splice(index, 1);
+  saveProdCalc();
+  prodRenderMachinePresets();
+  showNotice(`Machine "${removed.name}" deleted.`, "warning");
+}
 function prodDownloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -4388,6 +4460,16 @@ $("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($
 $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
+$("#prodMachineToggle")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.toggle("hidden"); prodRenderMachinePresets(); });
+$("#prodMachineClose")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.add("hidden"); });
+$("#prodSaveMachinePresetBtn")?.addEventListener("click", prodSaveMachinePreset);
+$("#prodMachinePresetName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") prodSaveMachinePreset(); });
+$("#prodMachinePresetList")?.addEventListener("click", (event) => {
+  const applyBtn = event.target.closest("[data-machine-apply]");
+  const deleteBtn = event.target.closest("[data-machine-delete]");
+  if (applyBtn) prodApplyMachinePreset(Number(applyBtn.dataset.machineApply));
+  else if (deleteBtn) prodDeleteMachinePreset(Number(deleteBtn.dataset.machineDelete));
+});
 $("#prodReset")?.addEventListener("click", () => { prodCalc.rows[prodCalc.fabric] = [{ ...PROD_SAMPLE_ROW }]; saveProdCalc(); renderProdTable(); });
 $("#prodTableBody")?.addEventListener("input", (event) => {
   const input = event.target.closest("input[data-field]");

@@ -330,10 +330,21 @@
             <button class="secondary" id="prodKeepFirst" type="button">Keep only first machine</button>
             <button class="secondary" id="prodLycraToggle" type="button" aria-pressed="false" title="Add a Lycra row below each machine">Lycra</button>
             <button class="secondary" id="prodFilamentToggle" type="button" aria-pressed="false" title="Add a Filament row below each machine">Filament</button>
+            <button class="secondary" id="prodMachineToggle" type="button" title="Save and reuse machine settings (Dia, Gauge, Needles, No of Feeder, RPM) for any machine">Machines</button>
             <span class="prod-total">Total Production / Shift: <b id="prodTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodLycraTotals">Lycra production / Shift: <b id="prodLycraProductionTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodFilamentTotals">Filament production / Shift: <b id="prodFilamentProductionTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodYarnTotals">Yarn breakdown / Shift: <b id="prodYarnBreakdown"></b></span>
+          </div>
+          <div class="prod-calc-input hidden" id="prodMachinePanel">
+            <button type="button" class="prod-panel-close" id="prodMachineClose" title="Close">×</button>
+            <p><b>Machines</b> — save a machine's settings (Dia, Gauge, Needles, No of Feeder, RPM) and reuse it for any machine, in any company. "Add row" adds a new machine row with that machine's settings; the yarn (Count and Stitch Length) is taken from the first machine row.</p>
+            <div class="prod-input-actions">
+              <input id="prodMachinePresetName" placeholder="Machine name, e.g. Mayer 30in 28G" maxlength="40">
+              <button class="primary" id="prodSaveMachinePresetBtn" type="button">Save current machine</button>
+              <span class="prod-machine-note" id="prodMachineNote"></span>
+            </div>
+            <div id="prodMachinePresetList"></div>
           </div>
           <p class="prod-formula">Production / Shift (kg) = π × Dia × Gauge × Stitch Length × Feeders × RPM × 60 × Shift Hours × Efficiency × Production factor ÷ (25.4 × 36 × 840 × Yarn Count × 2.2046) &nbsp;·&nbsp; Production factor is ×1 for single-bed fabrics and ×2 for double-bed fabrics (needles = π × Dia × Gauge × 2).</p>
         </div>
