@@ -340,6 +340,15 @@
             <span class="prod-total hidden" id="prodFilamentTotals">Filament production / Shift: <b id="prodFilamentProductionTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodYarnTotals">Yarn breakdown / Shift: <b id="prodYarnBreakdown"></b></span>
           </div>
+          <div class="prod-summary">
+            <h4>Yarn % Summary</h4>
+            <table class="prod-summary-table">
+              <thead><tr><th>Yarn</th><th>Yarn Count</th><th>Yarn %</th><th>Production / Shift (kg)</th></tr></thead>
+              <tbody id="prodSummaryBody"></tbody>
+              <tfoot><tr><td></td><td>Total</td><td id="prodSummaryTotalPct">100.000</td><td id="prodSummaryTotalKg">—</td></tr></tfoot>
+            </table>
+            <div class="prod-summary-actions"><button class="secondary" id="prodCopySummaryBtn" type="button">Copy table</button><button class="secondary" id="prodCopySummaryPctBtn" type="button">Copy Yarn %</button><span class="prod-copy-note" id="prodCopySummaryNote"></span></div>
+          </div>
           <div class="prod-calc-input hidden" id="prodMachinePanel">
             <button type="button" class="prod-panel-close" id="prodMachineClose" title="Close">×</button>
             <p><b>Machines</b> — save a machine's settings (Dia, Gauge, Needles, No of Feeder, RPM) and reuse it for any machine, in any company. "Add row" adds a new machine row with that machine's settings; the yarn (Count and Stitch Length) is taken from the first machine row.</p>

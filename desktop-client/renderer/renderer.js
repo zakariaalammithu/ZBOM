@@ -1285,7 +1285,88 @@ function prodUpdateFilamentTotals() {
   const el = $("#prodFilamentProductionTotal");
   if (el) el.textContent = `${prodFmt(total)} kg (${prodYarnPct(total, grandTotal)}%)`;
 }
+// Yarn % summary table (below the Production table): one row per yarn —
+// main + each extra yarn + Lycra + Filament, summed across all machines —
+// with Yarn % (3 decimals) and Production (kg). The largest yarn absorbs
+// any 0.001 rounding remainder so the %s sum to exactly 100.000.
+function prodRenderSummary() {
+  const body = $("#prodSummaryBody");
+  if (!body) return;
+  const rows = prodRows();
+  const spec = PROD_MULTI_YARN[prodCalc.fabric];
+  const grandTotal = rows.reduce((s, r) => s + (prodRowProduction(r) || 0), 0);
+  const first = rows[0];
+  const yarns = [];
+  const mainTotal = rows.reduce((s, r) => s + (prodProductionPerShift(r) || 0), 0);
+  const mainCount = first ? prodNum(first.count) : NaN;
+  yarns.push({ label: spec ? spec.main : "Main", count: Number.isFinite(mainCount) ? String(mainCount) : "—", prod: mainTotal });
+  if (spec) {
+    spec.extra.forEach((y, j) => {
+      const t = rows.reduce((s, r) => s + (prodYarnPerShift(r, prodYarnValues(r)[j]) || 0), 0);
+      const yv = first ? prodYarnValues(first)[j] : null;
+      const count = yv ? (yv.kind === "Denier" ? `${yv.denier}D` : String(yv.count)) : "—";
+      yarns.push({ label: y.label, count, prod: t });
+    });
+  }
+  if (prodHasLycra()) {
+    const lt = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
+    const denier = first ? prodLycraDenierFor(first) : NaN;
+    yarns.push({ label: "Lycra", count: Number.isFinite(denier) ? `${denier}D` : "—", prod: lt });
+  }
+  if (prodHasFilament()) {
+    const ft = rows.reduce((s, r) => s + (prodFilamentPerShift(r) || 0), 0);
+    const denier = first ? prodFilamentDenierFor(first) : NaN;
+    yarns.push({ label: "Filament", count: Number.isFinite(denier) ? `${denier}D` : "—", prod: ft });
+  }
+  const exact = yarns.map((y) => (Number.isFinite(y.prod) && Number.isFinite(grandTotal) && grandTotal > 0 ? (y.prod / grandTotal) * 100 : NaN));
+  const rounded = exact.map((v) => (Number.isFinite(v) ? Math.round(v * 1000) / 1000 : NaN));
+  const finiteIdx = rounded.map((v, i) => (Number.isFinite(v) ? i : -1)).filter((i) => i >= 0);
+  if (finiteIdx.length > 0) {
+    const sum = finiteIdx.reduce((s, i) => s + rounded[i], 0);
+    const diff = Math.round((100 - sum) * 1000) / 1000;
+    if (diff !== 0) {
+      let maxI = finiteIdx[0];
+      finiteIdx.forEach((i) => { if (yarns[i].prod > yarns[maxI].prod) maxI = i; });
+      rounded[maxI] = Math.round((rounded[maxI] + diff) * 1000) / 1000;
+    }
+  }
+  body.innerHTML = yarns.map((y, i) => `<tr><td>${prodEsc(y.label)}</td><td>${prodEsc(y.count)}</td><td>${Number.isFinite(rounded[i]) ? rounded[i].toFixed(3) : "—"}</td><td>${prodKg(y.prod)}</td></tr>`).join("");
+  const pctTotal = $("#prodSummaryTotalPct");
+  if (pctTotal) pctTotal.textContent = finiteIdx.length > 0 ? "100.000" : "—";
+  const kgTotal = $("#prodSummaryTotalKg");
+  if (kgTotal) kgTotal.textContent = prodKg(grandTotal);
+}
+function prodCopySummaryText(lines) {
+  const note = $("#prodCopySummaryNote");
+  const done = () => { if (note) { note.textContent = "Copied — paste into Excel or SAP."; setTimeout(() => { note.textContent = ""; }, 3000); } };
+  const fail = () => { if (note) note.textContent = "Copy did not work — select the table and press Ctrl+C."; };
+  const text = lines.join("\n");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fail);
+  } else {
+    fail();
+  }
+}
+function prodSummaryRows() {
+  const rows = [];
+  document.querySelectorAll("#prodSummaryBody tr").forEach((tr) => {
+    rows.push(Array.from(tr.querySelectorAll("td")).map((td) => td.textContent.trim()));
+  });
+  return rows;
+}
+function prodCopySummaryTable() {
+  const lines = [["Yarn", "Yarn Count", "Yarn %", "Production / Shift (kg)"]];
+  prodSummaryRows().forEach((cells) => lines.push(cells));
+  const pct = document.querySelector("#prodSummaryTotalPct");
+  const kg = document.querySelector("#prodSummaryTotalKg");
+  lines.push(["", "Total", pct ? pct.textContent.trim() : "", kg ? kg.textContent.trim() : ""]);
+  prodCopySummaryText(lines.map((cells) => cells.join("\t")));
+}
+function prodCopySummaryPct() {
+  prodCopySummaryText(prodSummaryRows().map((cells) => cells[2]));
+}
 function prodUpdateYarnTotals() {
+  prodRenderSummary();
   const wrap = $("#prodYarnTotals");
   if (!wrap) return;
   const spec = PROD_MULTI_YARN[prodCalc.fabric];
@@ -4606,6 +4687,8 @@ $("#prodKeepFirst")?.addEventListener("click", () => {
 $("#prodInputToggle")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.toggle("hidden"); });
 $("#prodLycraToggle")?.addEventListener("click", () => prodToggleExtra("lycra"));
 $("#prodFilamentToggle")?.addEventListener("click", () => prodToggleExtra("filament"));
+$("#prodCopySummaryBtn")?.addEventListener("click", prodCopySummaryTable);
+$("#prodCopySummaryPctBtn")?.addEventListener("click", prodCopySummaryPct);
 $("#prodDownloadTemplateBtn")?.addEventListener("click", prodDownloadTemplate);
 $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.classList.add("hidden"); });
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
