@@ -1501,7 +1501,7 @@ function prodRenderMachinePresets() {
   if (!list) return;
   const presets = Array.isArray(prodCalc.machinePresets) ? prodCalc.machinePresets : [];
   if (!presets.length) {
-    list.innerHTML = `<p class="prod-machine-empty">No machines saved yet. Set a machine row's Dia, Gauge, Needles, No of Feeder and RPM in the table, type a name above, and press "Save current machine".</p>`;
+    list.innerHTML = `<p class="prod-machine-empty">No M/C saved yet. Set a machine row's Dia, Gauge, Needles, No of Feeder and RPM in the table, type a name above, and press "M/C Save".</p>`;
     return;
   }
   list.innerHTML = presets.map((p, i) => {
@@ -1539,7 +1539,7 @@ function prodApplyMachinePreset(index) {
   rows.push({ ...PROD_SAMPLE_ROW, ...base, machine: String(rows.length + 1), dia: preset.dia, gauge: preset.gauge, needles: preset.needles, feeders: preset.feeders, rpm: preset.rpm });
   saveProdCalc();
   renderProdTable();
-  showNotice(`Machine "${preset.name}" added as M/C ${rows.length}.`, "success");
+  showNotice(`"${preset.name}" added as M/C ${rows.length}.`, "success");
 }
 function prodDeleteMachinePreset(index) {
   if (!Array.isArray(prodCalc.machinePresets)) return;
@@ -1548,7 +1548,7 @@ function prodDeleteMachinePreset(index) {
   prodCalc.machinePresets.splice(index, 1);
   saveProdCalc();
   prodRenderMachinePresets();
-  showNotice(`Machine "${removed.name}" deleted.`, "warning");
+  showNotice(`"${removed.name}" deleted.`, "warning");
 }
 function prodDownloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
