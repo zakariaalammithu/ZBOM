@@ -2598,6 +2598,12 @@ function renderFleeceMain() {
     lycraBtn.setAttribute("aria-pressed", String(yarns.some((y) => y.kind === "Lycra")));
     lycraBtn.disabled = yarns.length >= FLEECE_MAX_YARNS && !yarns.some((y) => y.kind === "Lycra");
   }
+  const filamentBtn = $("#fleeceFilamentToggle");
+  if (filamentBtn) {
+    const hasFilament = yarns.some((y) => y.kind === "Denier" && y.label === "Filament");
+    filamentBtn.setAttribute("aria-pressed", String(hasFilament));
+    filamentBtn.disabled = yarns.length >= FLEECE_MAX_YARNS && !hasFilament;
+  }
   fleeceRecalcMain();
 }
 // Updates only the calculated cells — never rebuilds the inputs, so typing
@@ -2681,6 +2687,19 @@ function fleeceToggleLycra() {
   } else {
     if (data.yarns.length >= FLEECE_MAX_YARNS) return;
     data.yarns.push(fleeceNormalizeYarn({ label: "Lycra", yarn: "", kind: "Lycra", denier: 40, cotton: 0, poly: 0, others: 100, feeder: 1, sl: 0.75 }));
+  }
+  saveFleeceCalc();
+  renderFleeceMain();
+}
+function fleeceToggleFilament() {
+  const data = fleeceCurrentData();
+  if (!data) return;
+  const idx = data.yarns.findIndex((y) => y.kind === "Denier" && y.label === "Filament");
+  if (idx >= 0) {
+    data.yarns.splice(idx, 1);
+  } else {
+    if (data.yarns.length >= FLEECE_MAX_YARNS) return;
+    data.yarns.push(fleeceNormalizeYarn({ label: "Filament", yarn: "", kind: "Denier", denier: 75, cotton: 0, poly: 100, others: 0, feeder: 1, sl: 2.75 }));
   }
   saveFleeceCalc();
   renderFleeceMain();
@@ -4578,6 +4597,7 @@ window.addEventListener("beforeprint", () => {
 });
 $("#fleeceAddYarn")?.addEventListener("click", fleeceAddYarn);
 $("#fleeceLycraToggle")?.addEventListener("click", fleeceToggleLycra);
+$("#fleeceFilamentToggle")?.addEventListener("click", fleeceToggleFilament);
 $("#fleeceFabricQty")?.addEventListener("input", (event) => {
   const data = fleeceCurrentData();
   if (!data) return;
