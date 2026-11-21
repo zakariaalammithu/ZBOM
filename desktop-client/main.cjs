@@ -467,7 +467,7 @@ async function loadAccessRegistry(config, force = false) {
   if (sharedPath) {
     Promise.race([
       fsp.readFile(sharedPath, "utf8"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 100)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
     ]).then((data) => {
       try {
         const remote = JSON.parse(data);
@@ -509,6 +509,34 @@ async function loadAccessRegistry(config, force = false) {
 
   writeJsonAtomic(userFile("access-cache.json"), registry).catch(() => {});
   return registry;
+}
+
+// Save the access registry (accounts, roles, departments) to the LAN
+// share and the local cache, and refresh the in-memory copy. The registry
+// is the source of truth on the LAN share, so — like registerUserAccount —
+// check reachability first and throw a plain-words error when the share
+// cannot be reached or written (the ZBOM-Admin folder must exist there
+// and this computer must have write permission). Throws on failure so
+// callers (saveSubAdmin, reviewSubAdminRequest, manageSubAdminAccount,
+// changeAccountRole) report the real problem instead of a success.
+async function saveAccessRegistry(config, registry) {
+  registry.version = Date.now();
+  const shareReachable = await Promise.race([
+    fsp.stat(config.sharePath).then(() => true).catch(() => false),
+    new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
+  ]);
+  if (!shareReachable) {
+    throw new Error(`The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`);
+  }
+  try {
+    await writeJsonAtomic(accessFile(config.sharePath), registry);
+  } catch (error) {
+    throw new Error(`Could not save the account: the ZBOM-Admin folder could not be created on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`);
+  }
+  await writeJsonAtomic(userFile("access-cache.json"), registry);
+  cachedAccessRegistry = registry;
+  cachedAccessRegistryTime = Date.now();
+  return { ok: true };
 }
 
 async function getCurrentAccess(usernameOverride = "") {

@@ -3952,15 +3952,20 @@ async function reviewSubAdminRequest(account, approved, actionButton = null) {
 }
 
 async function changeAccountRole(account, role) {
-  const result = await window.erp.changeAccountRole({
-    username: account.employeeId,
-    role,
-  });
-  showNotice(result.message, result.ok ? "success" : "warning");
-  if (!result.ok) return result;
-  state.access.subAdmins = result.subAdmins;
-  renderAccess();
-  return result;
+  try {
+    const result = await window.erp.changeAccountRole({
+      username: account.employeeId,
+      role,
+    });
+    showNotice(result.message, result.ok ? "success" : "warning");
+    if (!result.ok) return result;
+    state.access.subAdmins = result.subAdmins;
+    renderAccess();
+    return result;
+  } catch (error) {
+    showNotice(`Role change failed: ${error.message}`, "warning");
+    return { ok: false, message: error.message };
+  }
 }
 
 function renderPasswordAccounts() {
