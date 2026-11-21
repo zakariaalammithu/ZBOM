@@ -1214,8 +1214,6 @@ function prodUpdateLycraRow(i) {
   });
   const pctCell = tr.querySelector("[data-lycra-pct]");
   if (pctCell) pctCell.textContent = prodYarnPct(prodLycraPerShift(row), prodRowProduction(row));
-  const prodCell = tr.querySelector("[data-lycra-result]");
-  if (prodCell) prodCell.textContent = prodKg(prodLycraPerShift(row));
 }
 function prodUpdateYarnRow(i) {
   const row = prodRows()[i];
@@ -1233,8 +1231,6 @@ function prodUpdateYarnRow(i) {
     });
     const pctCell = tr.querySelector("[data-yarn-pct]");
     if (pctCell) pctCell.textContent = prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row));
-    const prodCell = tr.querySelector("[data-yarn-result]");
-    if (prodCell) prodCell.textContent = prodKg(prodYarnPerShift(row, yv));
   });
 }
 function prodUpdateLycraTotals() {
@@ -1270,8 +1266,6 @@ function prodUpdateFilamentRow(i) {
   });
   const pctCell = tr.querySelector("[data-filament-pct]");
   if (pctCell) pctCell.textContent = prodYarnPct(prodFilamentPerShift(row), prodRowProduction(row));
-  const prodCell = tr.querySelector("[data-filament-result]");
-  if (prodCell) prodCell.textContent = prodKg(prodFilamentPerShift(row));
 }
 function prodUpdateFilamentTotals() {
   const wrap = $("#prodFilamentTotals");
@@ -1505,7 +1499,7 @@ function renderProdTable() {
         return `<td class="prod-yarn-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
       <td class="prod-yarn-pct" data-yarn-pct="${i}-${j}">${prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row))}</td>
-      <td class="prod-result" data-yarn-result="${i}-${j}">${prodKg(prodYarnPerShift(row, yv))}</td>
+      <td></td>
       <td></td>
     </tr>`).join("");
     let extra = "";
@@ -1523,7 +1517,7 @@ function renderProdTable() {
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
       <td class="prod-yarn-pct" data-lycra-pct="${i}">${prodYarnPct(prodLycraPerShift(row), prodRowProduction(row))}</td>
-      <td class="prod-result" data-lycra-result="${i}">${prodKg(prodLycraPerShift(row))}</td>
+      <td></td>
       <td><button type="button" class="secondary prod-remove-lycra" data-row="${i}" title="Remove Lycra row">✕</button></td>
     </tr>`;
     }
@@ -1542,7 +1536,7 @@ function renderProdTable() {
         return `<td class="prod-filament-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
       <td class="prod-yarn-pct" data-filament-pct="${i}">${prodYarnPct(prodFilamentPerShift(row), prodRowProduction(row))}</td>
-      <td class="prod-result" data-filament-result="${i}">${prodKg(prodFilamentPerShift(row))}</td>
+      <td></td>
       <td><button type="button" class="secondary prod-remove-filament" data-row="${i}" title="Remove Filament row">✕</button></td>
     </tr>`;
     }
