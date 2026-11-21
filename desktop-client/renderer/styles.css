@@ -472,6 +472,7 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 #prodTable input{width:96px;height:30px;border:1px solid #a8b3bd;padding:0 8px;font-size:10px}
 #prodTable input:focus{border-color:var(--blue);outline:0;box-shadow:0 0 0 1px var(--blue)}
 #prodTable .prod-result{font-weight:700;color:var(--deep);white-space:nowrap}
+#prodTable .prod-yarn-pct{font-weight:600;color:var(--deep);white-space:nowrap;text-align:right}
 .prod-calc-actions{display:flex;gap:8px;align-items:center;margin:12px 0}
 .prod-total{margin-left:auto;font-size:11px;color:#354a5f}
 .prod-total b{font-size:14px;color:var(--deep)}

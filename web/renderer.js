@@ -1212,6 +1212,10 @@ function prodUpdateLycraRow(i) {
     const cell = tr.querySelector(`[data-mirror="${key}"]`);
     if (cell) cell.textContent = row[key] ?? "";
   });
+  const pctCell = tr.querySelector("[data-lycra-pct]");
+  if (pctCell) pctCell.textContent = prodYarnPct(prodLycraPerShift(row), prodRowProduction(row));
+  const prodCell = tr.querySelector("[data-lycra-result]");
+  if (prodCell) prodCell.textContent = prodKg(prodLycraPerShift(row));
 }
 function prodUpdateYarnRow(i) {
   const row = prodRows()[i];
@@ -1227,6 +1231,10 @@ function prodUpdateYarnRow(i) {
       const cell = tr.querySelector(`[data-mirror="${key}"]`);
       if (cell) cell.textContent = key === "needles" ? prodNeedlesText(row) : (row[key] ?? "");
     });
+    const pctCell = tr.querySelector("[data-yarn-pct]");
+    if (pctCell) pctCell.textContent = prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row));
+    const prodCell = tr.querySelector("[data-yarn-result]");
+    if (prodCell) prodCell.textContent = prodKg(prodYarnPerShift(row, yv));
   });
 }
 function prodUpdateLycraTotals() {
@@ -1237,8 +1245,9 @@ function prodUpdateLycraTotals() {
   if (!isLycra) return;
   const rows = prodRows();
   const lycraTotal = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
+  const grandTotal = rows.reduce((s, r) => s + (prodRowProduction(r) || 0), 0);
   const prodEl = $("#prodLycraProductionTotal");
-  if (prodEl) prodEl.textContent = `${prodFmt(lycraTotal)} kg`;
+  if (prodEl) prodEl.textContent = `${prodFmt(lycraTotal)} kg (${prodYarnPct(lycraTotal, grandTotal)}%)`;
 }
 function prodUpdateFilamentRow(i) {
   const row = prodRows()[i];
@@ -1259,6 +1268,10 @@ function prodUpdateFilamentRow(i) {
     const cell = tr.querySelector(`[data-mirror="${key}"]`);
     if (cell) cell.textContent = row[key] ?? "";
   });
+  const pctCell = tr.querySelector("[data-filament-pct]");
+  if (pctCell) pctCell.textContent = prodYarnPct(prodFilamentPerShift(row), prodRowProduction(row));
+  const prodCell = tr.querySelector("[data-filament-result]");
+  if (prodCell) prodCell.textContent = prodKg(prodFilamentPerShift(row));
 }
 function prodUpdateFilamentTotals() {
   const wrap = $("#prodFilamentTotals");
@@ -1268,8 +1281,9 @@ function prodUpdateFilamentTotals() {
   if (!hasFil) return;
   const rows = prodRows();
   const total = rows.reduce((s, r) => s + (prodFilamentPerShift(r) || 0), 0);
+  const grandTotal = rows.reduce((s, r) => s + (prodRowProduction(r) || 0), 0);
   const el = $("#prodFilamentProductionTotal");
-  if (el) el.textContent = `${prodFmt(total)} kg`;
+  if (el) el.textContent = `${prodFmt(total)} kg (${prodYarnPct(total, grandTotal)}%)`;
 }
 function prodUpdateYarnTotals() {
   const wrap = $("#prodYarnTotals");
@@ -1281,16 +1295,31 @@ function prodUpdateYarnTotals() {
   const el = $("#prodYarnBreakdown");
   if (!el) return;
   const mainTotal = rows.reduce((s, r) => s + (prodProductionPerShift(r) || 0), 0);
-  const parts = [`${spec.main} ${prodFmt(mainTotal)} kg`];
+  const grandTotal = rows.reduce((s, r) => s + (prodRowProduction(r) || 0), 0);
+  const parts = [`${spec.main} ${prodFmt(mainTotal)} kg (${prodYarnPct(mainTotal, grandTotal)}%)`];
   spec.extra.forEach((y, j) => {
     const t = rows.reduce((s, r) => s + (prodYarnPerShift(r, prodYarnValues(r)[j]) || 0), 0);
-    parts.push(`${y.label} ${prodFmt(t)} kg`);
+    parts.push(`${y.label} ${prodFmt(t)} kg (${prodYarnPct(t, grandTotal)}%)`);
   });
+  if (prodHasLycra()) {
+    const lt = rows.reduce((s, r) => s + (prodLycraPerShift(r) || 0), 0);
+    parts.push(`Lycra ${prodFmt(lt)} kg (${prodYarnPct(lt, grandTotal)}%)`);
+  }
+  if (prodHasFilament()) {
+    const ft = rows.reduce((s, r) => s + (prodFilamentPerShift(r) || 0), 0);
+    parts.push(`Filament ${prodFmt(ft)} kg (${prodYarnPct(ft, grandTotal)}%)`);
+  }
   el.textContent = parts.join(" · ");
 }
 
 function prodFmt(value, decimals = 2) {
   return Number.isFinite(value) ? value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) : "—";
+}
+// Yarn %: one yarn's share of its machine's (or all machines') total
+// production, like the Yarn Calculation summary — 3 decimals.
+function prodYarnPct(part, total) {
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return "—";
+  return prodFmt((part / total) * 100, 3);
 }
 function prodKg(value) {
   return Number.isFinite(value) ? `${prodFmt(value)} kg` : "—";
@@ -1361,7 +1390,7 @@ function prodRenderExtraToggles() {
 }
 function renderProdTable() {
   const headRow = $("#prodTableHeadRow");
-  if (headRow) headRow.innerHTML = prodColumns().map((c) => `<th>${prodEsc(c.label)}</th>`).join("") + `<th>Production / Shift (kg)</th><th></th>`;
+  if (headRow) headRow.innerHTML = prodColumns().map((c) => `<th>${prodEsc(c.label)}</th>`).join("") + `<th>Yarn %</th><th>Production / Shift (kg)</th><th></th>`;
   const body = $("#prodTableBody");
   if (!body) return;
   const rows = prodRows();
@@ -1377,6 +1406,7 @@ function renderProdTable() {
         if (c.key) return `<td><input data-field="${c.key}" type="number" min="0" step="${c.key === "feeders" ? "1" : "any"}" value="${prodEsc(row[c.key] ?? "")}"></td>`;
         return `<td><input data-field="extra" data-extra="${prodEsc(c.label)}" value="${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}"></td>`;
       }).join("")}
+      <td class="prod-yarn-pct" data-main-pct="${i}">${prodYarnPct(prodProductionPerShift(row), prodRowProduction(row))}</td>
       <td class="prod-result" data-result="${i}">${prodKg(prodRowProduction(row))}</td>
       <td><button type="button" class="secondary prod-remove-row" data-row="${i}" title="Remove machine">✕</button></td>
     </tr>`;
@@ -1393,7 +1423,8 @@ function renderProdTable() {
         if (c.key) return `<td class="prod-yarn-mirror" data-mirror="${c.key}">${prodEsc(c.key === "needles" ? prodNeedlesText(row) : (row[c.key] ?? ""))}</td>`;
         return `<td class="prod-yarn-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
-      <td></td>
+      <td class="prod-yarn-pct" data-yarn-pct="${i}-${j}">${prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row))}</td>
+      <td class="prod-result" data-yarn-result="${i}-${j}">${prodKg(prodYarnPerShift(row, yv))}</td>
       <td></td>
     </tr>`).join("");
     let extra = "";
@@ -1410,7 +1441,8 @@ function renderProdTable() {
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
-      <td></td>
+      <td class="prod-yarn-pct" data-lycra-pct="${i}">${prodYarnPct(prodLycraPerShift(row), prodRowProduction(row))}</td>
+      <td class="prod-result" data-lycra-result="${i}">${prodKg(prodLycraPerShift(row))}</td>
       <td><button type="button" class="secondary prod-remove-lycra" data-row="${i}" title="Remove Lycra row">✕</button></td>
     </tr>`;
     }
@@ -1428,7 +1460,8 @@ function renderProdTable() {
         if (c.key) return `<td class="prod-filament-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-filament-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
-      <td></td>
+      <td class="prod-yarn-pct" data-filament-pct="${i}">${prodYarnPct(prodFilamentPerShift(row), prodRowProduction(row))}</td>
+      <td class="prod-result" data-filament-result="${i}">${prodKg(prodFilamentPerShift(row))}</td>
       <td><button type="button" class="secondary prod-remove-filament" data-row="${i}" title="Remove Filament row">✕</button></td>
     </tr>`;
     }
@@ -1451,6 +1484,8 @@ function prodRecalcRow(i) {
   const row = prodRows()[i];
   const cell = document.querySelector(`#prodTableBody [data-result="${i}"]`);
   if (cell && row) cell.textContent = prodKg(prodRowProduction(row));
+  const pctCell = document.querySelector(`#prodTableBody [data-main-pct="${i}"]`);
+  if (pctCell && row) pctCell.textContent = prodYarnPct(prodProductionPerShift(row), prodRowProduction(row));
   // The Needles input shows the effective needle count. When no needle count
   // was typed for this machine, it follows Dia x Gauge x factor, so it is
   // refreshed here whenever the row changes.
