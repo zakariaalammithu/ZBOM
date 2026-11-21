@@ -1575,12 +1575,35 @@ function prodDownloadTemplate() {
   // columns, so the values round-trip through upload and download.
   if (prodHasLycra()) header.push("Lycra Denier (D)", "Lycra Stitch Length (mm)", "Lycra Needles", "Lycra No of Feeder");
   if (prodHasFilament()) header.push("Filament Denier (D)", "Filament Stitch Length (mm)", "Filament Needles", "Filament No of Feeder");
-  const ws = window.XLSX.utils.aoa_to_sheet([header]);
+  // Two example machines, so a new person sees exactly what to fill in
+  // and can upload the file as it is. The values are the sample machine
+  // and a second machine with different settings; the extra-yarn, Lycra
+  // and Filament columns use this fabric's defaults.
+  const exampleMachines = [
+    { machine: "1", count: 50, stitchLength: 2.2, dia: 30, gauge: 28, needles: "", feeders: 96, rpm: 25 },
+    { machine: "2", count: 30, stitchLength: 2.6, dia: 32, gauge: 24, needles: "", feeders: 72, rpm: 22 },
+  ];
+  const baseCols = prodDefaultColumns();
+  const exampleRows = exampleMachines.map((m) => {
+    const vals = baseCols.map((c) => {
+      if (c.key === "machine") return m.machine;
+      if (c.key === "needles") return "";
+      return m[c.key] ?? "";
+    });
+    yarnSpec.forEach((y) => {
+      vals.push(y.kind === "Denier" ? y.denier : y.count, y.sl);
+    });
+    if (prodHasLycra()) vals.push(40, m.stitchLength, "", "");
+    if (prodHasFilament()) vals.push(75, 2.75, "", "");
+    return vals;
+  });
+  const ws = window.XLSX.utils.aoa_to_sheet([header, ...exampleRows]);
   ws["!cols"] = header.map(() => ({ wch: 18 }));
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const readme = window.XLSX.utils.aoa_to_sheet([
     ["How to use this template"],
-    ["Fill one machine per row, starting at row 2."],
+    ["Rows 2 and 3 are examples — edit them, delete them, or add more machines below. Fill one machine per row."],
+    ["You can upload this file as it is — the example machines are valid and will replace the current list for this fabric."],
     ["Do not change the header names in row 1."],
     ["M/C No can be a number or a name."],
     ["All other columns must be numbers greater than 0."],
@@ -1846,7 +1869,8 @@ function prodProblemsHtml(problems) {
 }
 async function prodHandleUpload(file) {
   const report = $("#prodImportReport");
-  const setReport = (html) => { if (report) report.innerHTML = html; };
+  const quickReport = $("#prodQuickReport");
+  const setReport = (html) => { if (report) report.innerHTML = html; if (quickReport) quickReport.innerHTML = html; };
   if (!file) return;
   if (!window.XLSX) { setReport(`<p class="prod-import-error">Excel support is not available in this version.</p>`); return; }
   try {
@@ -4447,6 +4471,9 @@ $("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($
 $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
+$("#prodQuickDownloadBtn")?.addEventListener("click", prodExportExcel);
+$("#prodQuickUploadBtn")?.addEventListener("click", () => $("#prodQuickUploadInput")?.click());
+$("#prodQuickUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
 $("#prodMachineToggle")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.toggle("hidden"); prodRenderMachinePresets(); });
 $("#prodMachineClose")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.add("hidden"); });
 $("#prodSaveMachinePresetBtn")?.addEventListener("click", prodSaveMachinePreset);
