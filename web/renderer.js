@@ -4588,7 +4588,9 @@ document.addEventListener("click", async (event) => {
     const group = $("#materialSubmodules");
     const expanded = Boolean(group && group.classList.contains("hidden"));
     setMaterialMenuExpanded(expanded);
-    return;
+    // No return here: fall through to changeView(targetView) below so
+    // the button also opens the material search (data-view="materials"),
+    // like primarySummaryNav and administrationNav do.
   }
   if (btn.id === "primarySummaryNav") {
     const group = $("#summarySubmodules");
