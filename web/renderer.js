@@ -4051,6 +4051,14 @@ async function updateEverything() {
   $("#updateNow").disabled = false;
   $("#updateNow").textContent = "Update Now";
   showNotice(software?.ok ? "All data, permissions and software are up to date." : "Data updated. Software update folder is not available.", software?.ok ? "success" : "warning");
+  // On the website there is no desktop installer to run, so pull the
+  // newest deployed version by reloading the page. The current view is
+  // saved and restored after the reload (see initialize). Desktop loads
+  // from a local file, so it never reloads here.
+  if (location.protocol !== "file:") {
+    try { sessionStorage.setItem("zbom-update-view", state.view || "dashboard"); } catch (e) {}
+    window.setTimeout(() => window.location.reload(), 900);
+  }
 }
 
 async function exportCurrent(format) {
@@ -4126,7 +4134,13 @@ async function initialize() {
   renderAccess();
   renderState();
   renderCodeRequirementPreview();
-  changeView("materials");
+  // After an "Update Now" reload, return to the view the user was on.
+  let initialView = "materials";
+  try {
+    const savedView = sessionStorage.getItem("zbom-update-view");
+    if (savedView && document.getElementById(savedView)) { initialView = savedView; sessionStorage.removeItem("zbom-update-view"); }
+  } catch (e) {}
+  changeView(initialView);
 
   // Asynchronous background state fetch
   window.erp.getState().then((initial) => {

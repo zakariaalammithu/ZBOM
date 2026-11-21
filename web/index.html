@@ -292,6 +292,9 @@
             <label>Shift Hours<input id="prodShiftHours" type="number" min="1" max="24" step="0.5" value="24"></label>
             <label>Efficiency %<input id="prodEfficiency" type="number" min="1" max="100" step="1" value="85"></label>
             <button class="secondary" id="prodInputToggle" type="button">Input Name</button>
+            <button class="secondary" id="prodQuickDownloadBtn" type="button" title="Download the current fabric's machines as an Excel file (values only)">Download Excel</button>
+            <button class="secondary" id="prodQuickUploadBtn" type="button" title="Upload an Excel file to replace the current fabric's machines">Upload Excel</button>
+            <input type="file" id="prodQuickUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
           </div>
           <div class="prod-calc-factor-row">
             <label>Production factor<input id="prodFactor" type="number" min="0.1" step="0.1" value="1"></label>
@@ -314,6 +317,7 @@
             </div>
             <div id="prodImportReport"></div>
           </div>
+          <div id="prodQuickReport"></div>
           <div class="prod-calc-notice hidden" id="prodFabricNotice"></div>
         </div>
         <div id="prodCalcBody">
@@ -331,15 +335,11 @@
             <button class="secondary" id="prodLycraToggle" type="button" aria-pressed="false" title="Add a Lycra row below each machine">Lycra</button>
             <button class="secondary" id="prodFilamentToggle" type="button" aria-pressed="false" title="Add a Filament row below each machine">Filament</button>
             <button class="secondary" id="prodMachineToggle" type="button" title="Save and reuse machine settings (Dia, Gauge, Needles, No of Feeder, RPM) for any machine">Machines</button>
-            <button class="secondary" id="prodQuickDownloadBtn" type="button" title="Download the current fabric's machines as an Excel file (values only)">Download Excel</button>
-            <button class="secondary" id="prodQuickUploadBtn" type="button" title="Upload an Excel file to replace the current fabric's machines">Upload Excel</button>
-            <input type="file" id="prodQuickUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
             <span class="prod-total">Total Production / Shift: <b id="prodTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodLycraTotals">Lycra production / Shift: <b id="prodLycraProductionTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodFilamentTotals">Filament production / Shift: <b id="prodFilamentProductionTotal">0 kg</b></span>
             <span class="prod-total hidden" id="prodYarnTotals">Yarn breakdown / Shift: <b id="prodYarnBreakdown"></b></span>
           </div>
-          <div id="prodQuickReport"></div>
           <div class="prod-calc-input hidden" id="prodMachinePanel">
             <button type="button" class="prod-panel-close" id="prodMachineClose" title="Close">×</button>
             <p><b>Machines</b> — save a machine's settings (Dia, Gauge, Needles, No of Feeder, RPM) and reuse it for any machine, in any company. "Add row" adds a new machine row with that machine's settings; the yarn (Count and Stitch Length) is taken from the first machine row.</p>
