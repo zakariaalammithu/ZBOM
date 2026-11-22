@@ -4620,7 +4620,7 @@ $("#diaSummarySearch")?.addEventListener("input", debounce(renderDiaWiseSummary,
 $("#prodFabricSelect")?.addEventListener("change", (event) => { prodCalc.fabric = event.target.value; saveProdCalc(); renderProductionCalculation(); });
 $("#prodShiftHours")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodShiftHours").value); if (Number.isFinite(v) && v > 0) { prodCalc.shiftHours = v; saveProdCalc(); renderProdTable(); } }, 250));
 $("#prodEfficiency")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodEfficiency").value); if (Number.isFinite(v) && v > 0 && v <= 100) { prodCalc.efficiency = v; saveProdCalc(); renderProdTable(); } }, 250));
-$("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; saveProdCalc(); prodRenderFactorNote(); renderProdTable(); } }, 250));
+$("#prodFactor")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodFactor").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.factors) prodCalc.factors = {}; prodCalc.factors[prodCalc.fabric] = v; (prodRows() || []).forEach((r) => { if (r) r.needles = ""; }); saveProdCalc(); prodRenderFactorNote(); renderProdTable(); } }, 250));
 $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioFace").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].face = v; saveProdCalc(); } }, 250));
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
@@ -4662,6 +4662,9 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   } else {
     row[input.dataset.field] = input.value;
   }
+  // Dia / Gauge drive the needle count: changing either clears a typed
+  // Needles value so the count is worked out again from Dia x Gauge x factor.
+  if (input.dataset.field === "dia" || input.dataset.field === "gauge") row.needles = "";
   saveProdCalc();
   prodRecalcRow(idx);
 });
