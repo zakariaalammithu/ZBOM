@@ -1131,8 +1131,13 @@ function prodLycraSlFor(row) {
   return Number.isFinite(v) && v > 0 ? v : prodNum(row && row.stitchLength);
 }
 function prodLycraNeedlesFor(row) {
+  const needles = prodNeedlesFor(row);
+  // Half: Lycra uses half the machine's needles.
+  if (row && row.lycraNeedleHalf) {
+    return Number.isFinite(needles) && needles > 0 ? Math.round(needles / 2) : NaN;
+  }
   const v = prodNum(row && row.lycraNeedles);
-  return Number.isFinite(v) && v > 0 ? v : prodNeedlesFor(row);
+  return Number.isFinite(v) && v > 0 ? v : needles;
 }
 function prodLycraFeedersFor(row) {
   const feeders = prodNum(row && row.feeders);
@@ -1211,7 +1216,9 @@ function prodUpdateLycraRow(i) {
   const slInput = tr.querySelector('input[data-field="lycraSl"]');
   if (slInput && !Number.isFinite(prodNum(row.lycraSl))) slInput.value = prodValText(prodLycraSlFor(row));
   const needlesInput = tr.querySelector('input[data-field="lycraNeedles"]');
-  if (needlesInput && !Number.isFinite(prodNum(row.lycraNeedles))) needlesInput.value = prodValText(prodLycraNeedlesFor(row));
+  if (needlesInput && (row.lycraNeedleHalf || !Number.isFinite(prodNum(row.lycraNeedles)))) needlesInput.value = prodValText(prodLycraNeedlesFor(row));
+  const needleMode = tr.querySelector('select[data-field="lycraNeedleMode"]');
+  if (needleMode) needleMode.value = row.lycraNeedleHalf ? "half" : "full";
   const feedersInput = tr.querySelector('input[data-field="lycraFeeders"]');
   if (feedersInput && (row.lycraFeederHalf || !Number.isFinite(prodNum(row.lycraFeeders)))) feedersInput.value = prodValText(prodLycraFeedersFor(row));
   const feederMode = tr.querySelector('select[data-field="lycraFeederMode"]');
@@ -1519,7 +1526,7 @@ function renderProdTable() {
         if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
         if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="lycraSl" type="number" min="0" step="any" value="${prodValText(prodLycraSlFor(row))}"></td>`;
-        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodValText(prodLycraNeedlesFor(row))}"></td>`;
+        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodValText(prodLycraNeedlesFor(row))}"><select data-field="lycraNeedleMode" class="prod-feeder-mode" title="Lycra needles: Full or Half"><option value="full"${row.lycraNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraNeedleHalf ? " selected" : ""}>\u00bd</option></select></td>`;
         if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"><select data-field="lycraFeederMode" class="prod-feeder-mode" title="Lycra feeders: Full or Half"><option value="full"${row.lycraFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraFeederHalf ? " selected" : ""}>\u00bd</option></select></td>`;
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
@@ -4675,17 +4682,20 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   if (input.dataset.field === "dia" || input.dataset.field === "gauge") row.needles = "";
   // Typing a Lycra feeder number means a custom (Full) value, not Half mode.
   if (input.dataset.field === "lycraFeeders") row.lycraFeederHalf = false;
+  // Same for needles: typing a Lycra needle count means Full (custom), not Half.
+  if (input.dataset.field === "lycraNeedles") row.lycraNeedleHalf = false;
   saveProdCalc();
   prodRecalcRow(idx);
 });
 $("#prodTableBody")?.addEventListener("change", (event) => {
-  const select = event.target.closest("select[data-field=\"lycraFeederMode\"]");
+  const select = event.target.closest("select[data-field=\"lycraFeederMode\"], select[data-field=\"lycraNeedleMode\"]");
   if (!select) return;
   const tr = select.closest("tr[data-lycra-row]");
   const idx = Number(tr?.dataset.lycraRow);
   const row = prodRows()[idx];
   if (!row) return;
-  row.lycraFeederHalf = select.value === "half";
+  if (select.dataset.field === "lycraFeederMode") row.lycraFeederHalf = select.value === "half";
+  else if (select.dataset.field === "lycraNeedleMode") row.lycraNeedleHalf = select.value === "half";
   saveProdCalc();
   prodRecalcRow(idx);
 });
