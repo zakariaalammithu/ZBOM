@@ -1658,6 +1658,9 @@ function prodDeleteMachinePreset(index) {
   prodCalc.machinePresets.splice(index, 1);
   saveProdCalc();
   prodRenderMachinePresets();
+  // Clear the "saved" status line so it does not keep claiming a deleted preset is still saved.
+  const note = document.getElementById("prodMachineNote");
+  if (note) note.textContent = "";
   showNotice(`Machine "${removed.name}" deleted.`, "warning");
 }
 function prodDownloadBlob(blob, filename) {
