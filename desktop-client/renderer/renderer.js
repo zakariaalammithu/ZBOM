@@ -1135,8 +1135,14 @@ function prodLycraNeedlesFor(row) {
   return Number.isFinite(v) && v > 0 ? v : prodNeedlesFor(row);
 }
 function prodLycraFeedersFor(row) {
+  const feeders = prodNum(row && row.feeders);
+  // Half feeder: Lycra runs on every other feeder, so it uses half the
+  // machine's feeders. The needle count stays the machine's full count.
+  if (row && row.lycraFeederHalf) {
+    return Number.isFinite(feeders) && feeders > 0 ? Math.round(feeders / 2) : NaN;
+  }
   const v = prodNum(row && row.lycraFeeders);
-  return Number.isFinite(v) && v > 0 ? v : prodNum(row && row.feeders);
+  return Number.isFinite(v) && v > 0 ? v : feeders;
 }
 function prodFilamentNeedlesFor(row) {
   const v = prodNum(row && row.filamentNeedles);
@@ -1207,7 +1213,9 @@ function prodUpdateLycraRow(i) {
   const needlesInput = tr.querySelector('input[data-field="lycraNeedles"]');
   if (needlesInput && !Number.isFinite(prodNum(row.lycraNeedles))) needlesInput.value = prodValText(prodLycraNeedlesFor(row));
   const feedersInput = tr.querySelector('input[data-field="lycraFeeders"]');
-  if (feedersInput && !Number.isFinite(prodNum(row.lycraFeeders))) feedersInput.value = prodValText(prodLycraFeedersFor(row));
+  if (feedersInput && (row.lycraFeederHalf || !Number.isFinite(prodNum(row.lycraFeeders)))) feedersInput.value = prodValText(prodLycraFeedersFor(row));
+  const feederMode = tr.querySelector('select[data-field="lycraFeederMode"]');
+  if (feederMode) feederMode.value = row.lycraFeederHalf ? "half" : "full";
   ["dia", "gauge", "rpm"].forEach((key) => {
     const cell = tr.querySelector(`[data-mirror="${key}"]`);
     if (cell) cell.textContent = row[key] ?? "";
@@ -1512,7 +1520,7 @@ function renderProdTable() {
         if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="lycraSl" type="number" min="0" step="any" value="${prodValText(prodLycraSlFor(row))}"></td>`;
         if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodValText(prodLycraNeedlesFor(row))}"></td>`;
-        if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"></td>`;
+        if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"><select data-field="lycraFeederMode" class="prod-feeder-mode" title="Lycra feeders: Full or Half"><option value="full"${row.lycraFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraFeederHalf ? " selected" : ""}>\u00bd</option></select></td>`;
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
@@ -4665,6 +4673,19 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   // Dia / Gauge drive the needle count: changing either clears a typed
   // Needles value so the count is worked out again from Dia x Gauge x factor.
   if (input.dataset.field === "dia" || input.dataset.field === "gauge") row.needles = "";
+  // Typing a Lycra feeder number means a custom (Full) value, not Half mode.
+  if (input.dataset.field === "lycraFeeders") row.lycraFeederHalf = false;
+  saveProdCalc();
+  prodRecalcRow(idx);
+});
+$("#prodTableBody")?.addEventListener("change", (event) => {
+  const select = event.target.closest("select[data-field=\"lycraFeederMode\"]");
+  if (!select) return;
+  const tr = select.closest("tr[data-lycra-row]");
+  const idx = Number(tr?.dataset.lycraRow);
+  const row = prodRows()[idx];
+  if (!row) return;
+  row.lycraFeederHalf = select.value === "half";
   saveProdCalc();
   prodRecalcRow(idx);
 });
