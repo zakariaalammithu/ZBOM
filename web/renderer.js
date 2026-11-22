@@ -1154,12 +1154,23 @@ function prodLycraFeedersFor(row) {
   return Number.isFinite(v) && v > 0 ? v : feeders;
 }
 function prodFilamentNeedlesFor(row) {
+  const needles = prodNeedlesFor(row);
+  // Half: Filament uses half the machine's needles.
+  if (row && row.filamentNeedleHalf) {
+    return Number.isFinite(needles) && needles > 0 ? Math.round(needles / 2) : NaN;
+  }
   const v = prodNum(row && row.filamentNeedles);
-  return Number.isFinite(v) && v > 0 ? v : prodNeedlesFor(row);
+  return Number.isFinite(v) && v > 0 ? v : needles;
 }
 function prodFilamentFeedersFor(row) {
+  const feeders = prodNum(row && row.feeders);
+  // Half feeder: Filament runs on every other feeder, so it uses half the
+  // machine's feeders.
+  if (row && row.filamentFeederHalf) {
+    return Number.isFinite(feeders) && feeders > 0 ? Math.round(feeders / 2) : NaN;
+  }
   const v = prodNum(row && row.filamentFeeders);
-  return Number.isFinite(v) && v > 0 ? v : prodNum(row && row.feeders);
+  return Number.isFinite(v) && v > 0 ? v : feeders;
 }
 function prodValText(v) {
   return Number.isFinite(v) ? String(v) : "";
@@ -1281,8 +1292,12 @@ function prodUpdateFilamentRow(i) {
   if (needlesInput) needlesInput.value = row.filamentNeedles ?? "";
   const needlesUsed = tr.querySelector('[data-filament-needles-used]');
   if (needlesUsed) needlesUsed.textContent = prodValText(prodFilamentNeedlesFor(row));
+  const needleMode = tr.querySelector('select[data-field="filamentNeedleMode"]');
+  if (needleMode) needleMode.value = row.filamentNeedleHalf ? "half" : "full";
   const feedersInput = tr.querySelector('input[data-field="filamentFeeders"]');
-  if (feedersInput && !Number.isFinite(prodNum(row.filamentFeeders))) feedersInput.value = prodValText(prodFilamentFeedersFor(row));
+  if (feedersInput && (row.filamentFeederHalf || !Number.isFinite(prodNum(row.filamentFeeders)))) feedersInput.value = prodValText(prodFilamentFeedersFor(row));
+  const feederMode = tr.querySelector('select[data-field="filamentFeederMode"]');
+  if (feederMode) feederMode.value = row.filamentFeederHalf ? "half" : "full";
   ["dia", "gauge", "rpm"].forEach((key) => {
     const cell = tr.querySelector(`[data-mirror="${key}"]`);
     if (cell) cell.textContent = row[key] ?? "";
@@ -1535,9 +1550,9 @@ function renderProdTable() {
         if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
         if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="lycraSl" type="number" min="0" step="any" value="${prodValText(prodLycraSlFor(row))}"></td>`;
-        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodEsc(row.lycraNeedles ?? "")}" placeholder="auto"><select data-field="lycraNeedleMode" class="prod-feeder-mode" title="Lycra needles: Full or Half"><option value="full"${row.lycraNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraNeedleHalf ? " selected" : ""}>\u00bd</option></select></td>`;
+        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodEsc(row.lycraNeedles ?? "")}" placeholder="auto"><select data-field="lycraNeedleMode" class="prod-feeder-mode" title="Lycra needles: Full or Half"><option value="full"${row.lycraNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraNeedleHalf ? " selected" : ""}>Half</option></select></td>`;
         if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-lycra-needles-used>${prodValText(prodLycraNeedlesFor(row))}</td>`;
-        if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"><select data-field="lycraFeederMode" class="prod-feeder-mode" title="Lycra feeders: Full or Half"><option value="full"${row.lycraFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraFeederHalf ? " selected" : ""}>\u00bd</option></select></td>`;
+        if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"><select data-field="lycraFeederMode" class="prod-feeder-mode" title="Lycra feeders: Full or Half"><option value="full"${row.lycraFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraFeederHalf ? " selected" : ""}>Half</option></select></td>`;
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
@@ -1555,9 +1570,9 @@ function renderProdTable() {
         if (c.key === "machine") return `<td class="prod-filament-label">${prodEsc(row.machine ?? i + 1)} · Filament</td>`;
         if (c.key === "count") return `<td><input data-field="filamentDenier" type="number" min="0" step="any" value="${fDenier}" placeholder="Denier"><div class="prod-filament-count">= ${prodFmt(5315 / fDenier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="filamentSl" type="number" min="0" step="any" value="${fSl}"></td>`;
-        if (c.key === "needles") return `<td><input data-field="filamentNeedles" type="number" min="0" step="1" value="${prodEsc(row.filamentNeedles ?? "")}" placeholder="auto"></td>`;
+        if (c.key === "needles") return `<td><input data-field="filamentNeedles" type="number" min="0" step="1" value="${prodEsc(row.filamentNeedles ?? "")}" placeholder="auto"><select data-field="filamentNeedleMode" class="prod-feeder-mode" title="Filament needles: Full or Half"><option value="full"${row.filamentNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.filamentNeedleHalf ? " selected" : ""}>Half</option></select></td>`;
         if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-filament-needles-used>${prodValText(prodFilamentNeedlesFor(row))}</td>`;
-        if (c.key === "feeders") return `<td><input data-field="filamentFeeders" type="number" min="0" step="1" value="${prodValText(prodFilamentFeedersFor(row))}"></td>`;
+        if (c.key === "feeders") return `<td><input data-field="filamentFeeders" type="number" min="0" step="1" value="${prodValText(prodFilamentFeedersFor(row))}"><select data-field="filamentFeederMode" class="prod-feeder-mode" title="Filament feeders: Full or Half"><option value="full"${row.filamentFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.filamentFeederHalf ? " selected" : ""}>Half</option></select></td>`;
         if (c.key) return `<td class="prod-filament-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-filament-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
@@ -4711,18 +4726,23 @@ $("#prodTableBody")?.addEventListener("input", (event) => {
   if (input.dataset.field === "lycraFeeders") row.lycraFeederHalf = false;
   // Same for needles: typing a Lycra needle count means Full (custom), not Half.
   if (input.dataset.field === "lycraNeedles") row.lycraNeedleHalf = false;
+  // Same for Filament: typing a number means a custom (Full) value.
+  if (input.dataset.field === "filamentFeeders") row.filamentFeederHalf = false;
+  if (input.dataset.field === "filamentNeedles") row.filamentNeedleHalf = false;
   saveProdCalc();
   prodRecalcRow(idx);
 });
 $("#prodTableBody")?.addEventListener("change", (event) => {
-  const select = event.target.closest("select[data-field=\"lycraFeederMode\"], select[data-field=\"lycraNeedleMode\"]");
+  const select = event.target.closest("select[data-field=\"lycraFeederMode\"], select[data-field=\"lycraNeedleMode\"], select[data-field=\"filamentFeederMode\"], select[data-field=\"filamentNeedleMode\"]");
   if (!select) return;
-  const tr = select.closest("tr[data-lycra-row]");
-  const idx = Number(tr?.dataset.lycraRow);
+  const tr = select.closest("tr[data-lycra-row], tr[data-filament-row]");
+  const idx = Number(tr?.dataset.lycraRow ?? tr?.dataset.filamentRow);
   const row = prodRows()[idx];
   if (!row) return;
   if (select.dataset.field === "lycraFeederMode") row.lycraFeederHalf = select.value === "half";
   else if (select.dataset.field === "lycraNeedleMode") row.lycraNeedleHalf = select.value === "half";
+  else if (select.dataset.field === "filamentFeederMode") row.filamentFeederHalf = select.value === "half";
+  else if (select.dataset.field === "filamentNeedleMode") row.filamentNeedleHalf = select.value === "half";
   saveProdCalc();
   prodRecalcRow(idx);
 });
