@@ -1130,9 +1130,16 @@ function prodFilamentPerShift(row) {
 // follow the machine row until a value is typed for that row — the same
 // "blank = follow, typed = own" rule as the Needles column. (The filament
 // stitch length instead defaults to 2.75, the filament of 3 Thread Fleece.)
+// Lycra stitch length defaults by fabric bed: jersey / Pique / any
+// single-bed jersey fabric uses 0.90 mm, Rib / Interlock (double-bed,
+// production factor 2) uses 0.05 mm. These are defaults only — the user
+// can type any value to override; clearing the cell returns to the default.
+function prodLycraDefaultSl() {
+  return prodFactor() === 2 ? 0.05 : 0.9;
+}
 function prodLycraSlFor(row) {
   const v = prodNum(row && row.lycraSl);
-  return Number.isFinite(v) && v > 0 ? v : prodNum(row && row.stitchLength);
+  return Number.isFinite(v) && v > 0 ? v : prodLycraDefaultSl();
 }
 function prodLycraNeedlesFor(row) {
   const needles = prodNeedlesFor(row);

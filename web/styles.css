@@ -440,8 +440,8 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 /* The Full/Half selector sits BELOW its number input (not beside it):
    the table uses a fixed layout and the cell clips anything wider than
    the column, so side-by-side the selector was squeezed to "…". */
-#prodTable input[data-field="lycraFeeders"], #prodTable input[data-field="lycraNeedles"], #prodTable input[data-field="filamentFeeders"], #prodTable input[data-field="filamentNeedles"]{display:block;width:84px}
-.prod-feeder-mode{display:block;width:84px;height:30px;border:1px solid #a8b3bd;padding:0 2px;font-size:10px;margin:4px 0 0;background:#fff}
+#prodTable input[data-field="lycraFeeders"], #prodTable input[data-field="lycraNeedles"], #prodTable input[data-field="filamentFeeders"], #prodTable input[data-field="filamentNeedles"]{display:block;width:76px}
+.prod-feeder-mode{display:block;width:76px;height:28px;border:1px solid #c5cfd8;padding:0 2px;font-size:10px;margin:4px 0 0;background:#fff}
 .prod-lycra-label{font-size:10px;color:var(--deep);font-weight:600;white-space:nowrap}
 .prod-lycra-mirror{font-size:10px;color:#52616e}
 .prod-lycra-count{font-size:9px;color:var(--muted);margin-top:2px;white-space:nowrap}
@@ -474,12 +474,12 @@ header .actions{display:flex;margin-left:auto}header .actions>:not(#updateNow){d
 .prod-import-problems{margin:8px 0 0;padding-left:18px;font-size:10px;color:#755d29;max-height:180px;overflow:auto}
 .prod-import-problems li{margin:2px 0}
 .prod-calc-notice button{height:30px}
-#prodTable input{width:96px;height:30px;border:1px solid #a8b3bd;padding:0 8px;font-size:10px}
+#prodTable input{width:78px;height:28px;border:1px solid #c5cfd8;padding:0 6px;font-size:10px}
 #prodTable input:focus{border-color:var(--blue);outline:0;box-shadow:0 0 0 1px var(--blue)}
 #prodTable{border:1px solid #d8e0e6}
-#prodTable th{background:#f4f8fb;border-bottom:1px solid #d8e0e6;border-right:1px solid #e6ebef}
+#prodTable th{background:#223548;color:#fff;font-weight:700;padding:8px 10px;border-bottom:1px solid #1a2a3a;border-right:1px solid #31465c}
 #prodTable th:last-child{border-right:0}
-#prodTable td{border-bottom:1px solid #e9eef1;border-right:1px solid #eef2f4}
+#prodTable td{padding:6px 8px;border-bottom:1px solid #e9eef1;border-right:1px solid #eef2f4}
 #prodTable td:last-child{border-right:0}
 #prodTable .prod-result{font-weight:700;color:var(--deep);white-space:nowrap}
 .prod-summary{margin-top:14px}
