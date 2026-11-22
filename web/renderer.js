@@ -1008,8 +1008,12 @@ function prodRows() { return prodCalc.rows[prodCalc.fabric] || []; }
 // (including Needles) plus any extra columns, in upload order.
 function prodDefaultColumns() {
   const cols = PROD_IMPORT_COLUMNS.map((c) => ({ key: c.key, label: c.label }));
-  const gaugeIdx = cols.findIndex((c) => c.key === "gauge");
-  cols.splice(gaugeIdx >= 0 ? gaugeIdx + 1 : cols.length, 0, { key: PROD_NEEDLES_COLUMN.key, label: PROD_NEEDLES_COLUMN.label });
+  // The two Needles columns sit after RPM (the last input column): the own
+  // (typed) count first, then the count actually used in the calculation.
+  cols.push(
+    { key: PROD_NEEDLES_COLUMN.key, label: PROD_NEEDLES_COLUMN.label },
+    { key: PROD_NEEDLES_USED_COLUMN.key, label: PROD_NEEDLES_USED_COLUMN.label },
+  );
   return cols;
 }
 function prodColumns() {
@@ -1020,15 +1024,15 @@ function prodColumns() {
     if (PROD_IMPORT_COLUMNS.every((c) => keys.includes(c.key))) base = stored;
   }
   if (!base) base = prodDefaultColumns();
-  // The Needles column is always shown (after Gauge). Older saved layouts
-  // and older uploaded files do not have it, so inject it if it is missing.
-  if (!base.some((c) => c && c.key === PROD_NEEDLES_COLUMN.key)) {
-    const out = base.slice();
-    const gaugeIdx = out.findIndex((c) => c && c.key === "gauge");
-    out.splice(gaugeIdx >= 0 ? gaugeIdx + 1 : out.length, 0, { key: PROD_NEEDLES_COLUMN.key, label: PROD_NEEDLES_COLUMN.label });
-    return out;
-  }
-  return base;
+  // The two Needles columns always sit after RPM: the own (typed) count,
+  // then the count actually used. Older saved layouts and older uploaded
+  // files have a single Needles column after Gauge — migrate them here.
+  const out = base.filter((c) => c && c.key !== PROD_NEEDLES_COLUMN.key && c.key !== PROD_NEEDLES_USED_COLUMN.key);
+  const rpmIdx = out.findIndex((c) => c && c.key === "rpm");
+  out.splice(rpmIdx >= 0 ? rpmIdx + 1 : out.length, 0,
+    { key: PROD_NEEDLES_COLUMN.key, label: PROD_NEEDLES_COLUMN.label },
+    { key: PROD_NEEDLES_USED_COLUMN.key, label: PROD_NEEDLES_USED_COLUMN.label });
+  return out;
 }
 
 function prodNum(value) { const n = parseFloat(value); return Number.isFinite(n) ? n : NaN; }
@@ -1216,7 +1220,9 @@ function prodUpdateLycraRow(i) {
   const slInput = tr.querySelector('input[data-field="lycraSl"]');
   if (slInput && !Number.isFinite(prodNum(row.lycraSl))) slInput.value = prodValText(prodLycraSlFor(row));
   const needlesInput = tr.querySelector('input[data-field="lycraNeedles"]');
-  if (needlesInput && (row.lycraNeedleHalf || !Number.isFinite(prodNum(row.lycraNeedles)))) needlesInput.value = prodValText(prodLycraNeedlesFor(row));
+  if (needlesInput) needlesInput.value = row.lycraNeedles ?? "";
+  const needlesUsed = tr.querySelector('[data-lycra-needles-used]');
+  if (needlesUsed) needlesUsed.textContent = prodValText(prodLycraNeedlesFor(row));
   const needleMode = tr.querySelector('select[data-field="lycraNeedleMode"]');
   if (needleMode) needleMode.value = row.lycraNeedleHalf ? "half" : "full";
   const feedersInput = tr.querySelector('input[data-field="lycraFeeders"]');
@@ -1240,9 +1246,9 @@ function prodUpdateYarnRow(i) {
     if (label) label.textContent = `${row.machine ?? i + 1} · ${yv.label}`;
     const countEl = tr.querySelector(".prod-yarn-count");
     if (countEl && yv.kind === "Denier") countEl.textContent = `= ${prodFmt(yv.count, 2)} Ne`;
-    ["dia", "gauge", "needles", "feeders", "rpm"].forEach((key) => {
+    ["dia", "gauge", "needles", "needlesUsed", "feeders", "rpm"].forEach((key) => {
       const cell = tr.querySelector(`[data-mirror="${key}"]`);
-      if (cell) cell.textContent = key === "needles" ? prodNeedlesText(row) : (row[key] ?? "");
+      if (cell) cell.textContent = key === "needles" ? (row.needles ?? "") : key === "needlesUsed" ? prodNeedlesText(row) : (row[key] ?? "");
     });
     const pctCell = tr.querySelector("[data-yarn-pct]");
     if (pctCell) pctCell.textContent = prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row));
@@ -1272,7 +1278,9 @@ function prodUpdateFilamentRow(i) {
   const slInput = tr.querySelector('input[data-field="filamentSl"]');
   if (slInput && !Number.isFinite(prodNum(row.filamentSl))) slInput.value = prodValText(prodFilamentSlFor(row));
   const needlesInput = tr.querySelector('input[data-field="filamentNeedles"]');
-  if (needlesInput && !Number.isFinite(prodNum(row.filamentNeedles))) needlesInput.value = prodValText(prodFilamentNeedlesFor(row));
+  if (needlesInput) needlesInput.value = row.filamentNeedles ?? "";
+  const needlesUsed = tr.querySelector('[data-filament-needles-used]');
+  if (needlesUsed) needlesUsed.textContent = prodValText(prodFilamentNeedlesFor(row));
   const feedersInput = tr.querySelector('input[data-field="filamentFeeders"]');
   if (feedersInput && !Number.isFinite(prodNum(row.filamentFeeders))) feedersInput.value = prodValText(prodFilamentFeedersFor(row));
   ["dia", "gauge", "rpm"].forEach((key) => {
@@ -1492,7 +1500,8 @@ function renderProdTable() {
     <tr data-row="${i}">
       ${columns.map((c) => {
         if (c.key === "machine") return `<td><input data-field="machine" value="${prodEsc(row.machine ?? "")}" inputmode="numeric"></td>`;
-        if (c.key === "needles") return `<td><input data-field="needles" type="number" min="0" step="1" value="${prodEsc(prodNeedlesText(row))}"></td>`;
+        if (c.key === "needles") return `<td><input data-field="needles" type="number" min="0" step="1" value="${prodEsc(row.needles ?? "")}" placeholder="auto"></td>`;
+        if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-needles-used>${prodNeedlesText(row)}</td>`;
         if (c.key) return `<td><input data-field="${c.key}" type="number" min="0" step="${c.key === "feeders" ? "1" : "any"}" value="${prodEsc(row[c.key] ?? "")}"></td>`;
         return `<td><input data-field="extra" data-extra="${prodEsc(c.label)}" value="${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}"></td>`;
       }).join("")}
@@ -1510,7 +1519,7 @@ function renderProdTable() {
           return `<td><input data-field="yarnCount" type="number" min="0" step="any" value="${yv.count}"></td>`;
         }
         if (c.key === "stitchLength") return `<td><input data-field="yarnSl" type="number" min="0" step="any" value="${yv.sl}"></td>`;
-        if (c.key) return `<td class="prod-yarn-mirror" data-mirror="${c.key}">${prodEsc(c.key === "needles" ? prodNeedlesText(row) : (row[c.key] ?? ""))}</td>`;
+        if (c.key) return `<td class="prod-yarn-mirror" data-mirror="${c.key}">${prodEsc(c.key === "needles" ? (row.needles ?? "") : c.key === "needlesUsed" ? prodNeedlesText(row) : (row[c.key] ?? ""))}</td>`;
         return `<td class="prod-yarn-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
       }).join("")}
       <td class="prod-yarn-pct" data-yarn-pct="${i}-${j}">${prodYarnPct(prodYarnPerShift(row, yv), prodRowProduction(row))}</td>
@@ -1526,7 +1535,8 @@ function renderProdTable() {
         if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
         if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="lycraSl" type="number" min="0" step="any" value="${prodValText(prodLycraSlFor(row))}"></td>`;
-        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodValText(prodLycraNeedlesFor(row))}"><select data-field="lycraNeedleMode" class="prod-feeder-mode" title="Lycra needles: Full or Half"><option value="full"${row.lycraNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraNeedleHalf ? " selected" : ""}>\u00bd</option></select></td>`;
+        if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodEsc(row.lycraNeedles ?? "")}" placeholder="auto"><select data-field="lycraNeedleMode" class="prod-feeder-mode" title="Lycra needles: Full or Half"><option value="full"${row.lycraNeedleHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraNeedleHalf ? " selected" : ""}>\u00bd</option></select></td>`;
+        if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-lycra-needles-used>${prodValText(prodLycraNeedlesFor(row))}</td>`;
         if (c.key === "feeders") return `<td><input data-field="lycraFeeders" type="number" min="0" step="1" value="${prodValText(prodLycraFeedersFor(row))}"><select data-field="lycraFeederMode" class="prod-feeder-mode" title="Lycra feeders: Full or Half"><option value="full"${row.lycraFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.lycraFeederHalf ? " selected" : ""}>\u00bd</option></select></td>`;
         if (c.key) return `<td class="prod-lycra-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-lycra-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
@@ -1545,7 +1555,8 @@ function renderProdTable() {
         if (c.key === "machine") return `<td class="prod-filament-label">${prodEsc(row.machine ?? i + 1)} · Filament</td>`;
         if (c.key === "count") return `<td><input data-field="filamentDenier" type="number" min="0" step="any" value="${fDenier}" placeholder="Denier"><div class="prod-filament-count">= ${prodFmt(5315 / fDenier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="filamentSl" type="number" min="0" step="any" value="${fSl}"></td>`;
-        if (c.key === "needles") return `<td><input data-field="filamentNeedles" type="number" min="0" step="1" value="${prodValText(prodFilamentNeedlesFor(row))}"></td>`;
+        if (c.key === "needles") return `<td><input data-field="filamentNeedles" type="number" min="0" step="1" value="${prodEsc(row.filamentNeedles ?? "")}" placeholder="auto"></td>`;
+        if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-filament-needles-used>${prodValText(prodFilamentNeedlesFor(row))}</td>`;
         if (c.key === "feeders") return `<td><input data-field="filamentFeeders" type="number" min="0" step="1" value="${prodValText(prodFilamentFeedersFor(row))}"></td>`;
         if (c.key) return `<td class="prod-filament-mirror" data-mirror="${c.key}">${prodEsc(row[c.key] ?? "")}</td>`;
         return `<td class="prod-filament-mirror">${prodEsc(row.extra && row.extra[c.label] != null ? row.extra[c.label] : "")}</td>`;
@@ -1576,12 +1587,15 @@ function prodRecalcRow(i) {
   if (cell && row) cell.textContent = prodKg(prodRowProduction(row));
   const pctCell = document.querySelector(`#prodTableBody [data-main-pct="${i}"]`);
   if (pctCell && row) pctCell.textContent = prodYarnPct(prodProductionPerShift(row), prodRowProduction(row));
-  // The Needles input shows the effective needle count. When no needle count
-  // was typed for this machine, it follows Dia x Gauge x factor, so it is
-  // refreshed here whenever the row changes.
-  if (row && !Number.isFinite(prodNum(row.needles))) {
-    const needleInput = document.querySelector(`#prodTableBody [data-row="${i}"] input[data-field="needles"]`);
-    if (needleInput) needleInput.value = prodNeedlesText(row);
+  // "Needles (own)" shows the typed count (blank = auto) and "Needles
+  // (used)" shows the effective count. Both are refreshed here whenever
+  // the row changes: the used count follows Dia x Gauge x factor unless
+  // an own count was typed.
+  if (row) {
+    const ownInput = document.querySelector(`#prodTableBody [data-row="${i}"] input[data-field="needles"]`);
+    if (ownInput) ownInput.value = row.needles ?? "";
+    const usedCell = document.querySelector(`#prodTableBody [data-row="${i}"] [data-needles-used]`);
+    if (usedCell) usedCell.textContent = prodNeedlesText(row);
   }
   prodUpdateLycraRow(i);
   prodUpdateFilamentRow(i);
@@ -1595,7 +1609,8 @@ function prodRecalcRow(i) {
 // Extra columns have no effect on the calculation — they are kept and
 // returned in the export, in the same order they were uploaded. The export
 // adds a "Production / Shift (kg)" column plus a separate "Production" sheet.
-const PROD_NEEDLES_COLUMN = { key: "needles", label: "Needles", match: ["needles", "needle", "no of needles", "no. of needles", "needle count", "total needles"] };
+const PROD_NEEDLES_COLUMN = { key: "needles", label: "Needles (own — blank = auto)", match: ["needles", "needle", "no of needles", "no. of needles", "needle count", "total needles", "needles (own)", "needles (own — blank = auto)", "needles own"] };
+const PROD_NEEDLES_USED_COLUMN = { key: "needlesUsed", label: "Needles (used)", match: ["needles (used)", "needles used", "used needles"] };
 const PROD_IMPORT_COLUMNS = [
   { key: "machine", label: "M/C No", match: ["m/c no", "machine", "m/c", "mc no", "m/c no."] },
   { key: "count", label: "Yarn Count (Ne)", match: ["yarn count (ne)", "yarn count", "count", "count ne", "count (ne)"] },
@@ -1773,7 +1788,8 @@ function prodExportExcel() {
   const columns = prodColumns();
   const prodCell = (row, c) => {
     if (c.key === "machine") return row.machine ?? "";
-    if (c.key === "needles") { const n = prodNeedlesFor(row); return Number.isFinite(n) ? n : ""; }
+    if (c.key === "needles") { const n = prodNum(row.needles); return Number.isFinite(n) ? n : ""; }
+    if (c.key === "needlesUsed") { const n = prodNeedlesFor(row); return Number.isFinite(n) ? n : ""; }
     return c.key ? prodNum(row[c.key]) : (row.extra && row.extra[c.label] != null ? row.extra[c.label] : "");
   };
   const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...yarnHeader, ...(isLycra ? ["Lycra Denier (D)", "Lycra Stitch Length (mm)", "Lycra Needles", "Lycra No of Feeder", "Lycra Production (kg)"] : []), ...(hasFilament ? ["Filament Denier (D)", "Filament Stitch Length (mm)", "Filament Needles", "Filament No of Feeder", "Filament Production (kg)"] : [])];
@@ -1793,7 +1809,7 @@ function prodExportExcel() {
   data.push(totalRow);
   const wb = window.XLSX.utils.book_new();
   const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
-  const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, needles: 12, feeders: 14, rpm: 10 };
+  const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, needles: 22, needlesUsed: 14, feeders: 14, rpm: 10 };
   ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...yarnSpec.flatMap(() => [{ wch: 16 }, { wch: 18 }, { wch: 20 }]), ...(isLycra ? [{ wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }] : []), ...(hasFilament ? [{ wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }] : [])];
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const prodData = [
@@ -1830,7 +1846,7 @@ function prodFindColumn(headers, col) {
 // "Lycra Production (kg)") are never treated as extra columns, and the
 // "Total" row of a downloaded file is skipped silently — so a downloaded
 // file can be uploaded again unchanged.
-const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)", "filament production (kg)"];
+const PROD_COMPUTED_COLUMN_LABELS = ["production / shift (kg)", "lycra production (kg)", "filament production (kg)", "needles (used)"];
 const PROD_LYCRA_DENIER_ALIASES = ["lycra denier (d)", "lycra denier", "denier"];
 const PROD_FILAMENT_DENIER_ALIASES = ["filament denier (d)", "filament denier", "filament"];
 const PROD_FILAMENT_SL_ALIASES = ["filament stitch length (mm)", "filament stitch length", "filament s/l"];
@@ -1860,7 +1876,7 @@ function prodParseImport(workbook) {
   // columns (canonical labels) plus any extra columns the user added
   // (their own header text). Extra columns are never validated and have
   // no effect on the calculation — they are kept and returned on export.
-  const knownLabels = new Set([...PROD_IMPORT_COLUMNS.flatMap((c) => [c.label.toLowerCase(), ...c.match]), PROD_NEEDLES_COLUMN.label.toLowerCase(), ...PROD_NEEDLES_COLUMN.match]);
+  const knownLabels = new Set([...PROD_IMPORT_COLUMNS.flatMap((c) => [c.label.toLowerCase(), ...c.match]), PROD_NEEDLES_COLUMN.label.toLowerCase(), ...PROD_NEEDLES_COLUMN.match, PROD_NEEDLES_USED_COLUMN.label.toLowerCase(), ...PROD_NEEDLES_USED_COLUMN.match]);
   // Yarn columns for the current fabric (multi-yarn only): "<Label> Count
   // (Ne)" / "<Label> Denier (D)" + "<Label> Stitch Length (mm)" are
   // inputs, and "<Label> Production (kg)" is computed (ignored on import,
