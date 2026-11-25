@@ -457,10 +457,14 @@
     return filename;
   }
 
-  function downloadXlsxWorkbook(wb, filename) {
+  async function downloadXlsxWorkbook(wb, filename) {
     var XLSXLib = requireSheetJS();
     var bytes = XLSXLib.write(wb, { bookType: "xlsx", type: "array" });
-    return triggerDownload(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), filename);
+    var blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    if (typeof window !== "undefined" && window.ZBOM_XLSX_STYLE) {
+      blob = await window.ZBOM_XLSX_STYLE.styleXlsxBlob(blob);
+    }
+    return triggerDownload(blob, filename);
   }
 
   function downloadTextFile(text, filename) {
@@ -720,7 +724,7 @@
     };
   }
 
-  function downloadLsmwFile(fileEntry) {
+  async function downloadLsmwFile(fileEntry) {
     if (fileEntry.kind === "txt") return downloadTextFile(fileEntry.text, fileEntry.name);
     return downloadXlsxWorkbook(fileEntry.wb, fileEntry.name);
   }
@@ -853,7 +857,7 @@
     if (!zkngSession.workbook || !zkngSession.state.materialReady) {
       return { ok: false, message: "No ready ZKNG Material Upload file available." };
     }
-    var filename = downloadXlsxWorkbook(zkngSession.workbook, zkngSession.filename);
+    var filename = await downloadXlsxWorkbook(zkngSession.workbook, zkngSession.filename);
     return { ok: true, path: filename, message: "Downloaded " + filename + " to Downloads." };
   }
 
@@ -898,10 +902,10 @@
     }
     if (!selected.length) return { ok: false, message: "Requested LSMW BOM file not found." };
     var downloaded = [];
-    selected.forEach(function (f) {
-      downloadLsmwFile(f);
-      downloaded.push(f.name);
-    });
+    for (var i = 0; i < selected.length; i++) {
+      await downloadLsmwFile(selected[i]);
+      downloaded.push(selected[i].name);
+    }
     if (fileType === "all") {
       return { ok: true, path: downloaded[0], paths: downloaded, message: "Downloaded all 4 LSMW BOM files to Downloads." };
     }
@@ -959,7 +963,7 @@
     if (!routingSession.workbook || !routingSession.state.ready) {
       return { ok: false, message: "No ready Routing Upload file available." };
     }
-    var filename = downloadXlsxWorkbook(routingSession.workbook, routingSession.filename);
+    var filename = await downloadXlsxWorkbook(routingSession.workbook, routingSession.filename);
     return { ok: true, path: filename, message: "Downloaded " + filename + " to Downloads." };
   }
 
@@ -1007,7 +1011,7 @@
     if (!characteristicsSession.workbook || !characteristicsSession.state.materialReady) {
       return { ok: false, message: "No ready Characteristics Upload file available." };
     }
-    var filename = downloadXlsxWorkbook(characteristicsSession.workbook, characteristicsSession.filename);
+    var filename = await downloadXlsxWorkbook(characteristicsSession.workbook, characteristicsSession.filename);
     return { ok: true, path: filename, message: "Downloaded " + filename + " to Downloads." };
   }
 

@@ -1705,8 +1705,9 @@ function prodDeleteMachinePreset(index) {
   if (note) note.textContent = "";
   showNotice(`Machine "${removed.name}" deleted.`, "warning");
 }
-function prodDownloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
+async function prodDownloadBlob(blob, filename) {
+  const styled = window.ZBOM_XLSX_STYLE ? await window.ZBOM_XLSX_STYLE.styleXlsxBlob(blob) : blob;
+  const url = URL.createObjectURL(styled);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -2497,8 +2498,9 @@ const FLEECE_EXCEL_COLUMNS = [
   { key: "feeder", label: "Feeder", match: ["feeder", "feeders"] },
   { key: "sl", label: "Stitch Length (mm)", match: ["stitch length (mm)", "stitch length", "s/l", "sl", "stitch length mm"] },
 ];
-function fleeceDownloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
+async function fleeceDownloadBlob(blob, filename) {
+  const styled = window.ZBOM_XLSX_STYLE ? await window.ZBOM_XLSX_STYLE.styleXlsxBlob(blob) : blob;
+  const url = URL.createObjectURL(styled);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
