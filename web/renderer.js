@@ -1099,7 +1099,11 @@ function prodProductionPerShift(row) {
 // it to the count automatically.
 function prodLycraDenierFor(row) {
   const v = prodNum(row && row.lycraDenier);
-  return Number.isFinite(v) && v > 0 ? v : 40;
+  if (Number.isFinite(v) && v > 0) return v;
+  // A fabric whose name has "Lycra" is a lycra fabric, so Lycra is always
+  // on there (40D). Any other fabric only has Lycra where the machine was
+  // actually given a Lycra denier — a blank column means no Lycra.
+  return prodCalc.fabric.includes("Lycra") ? 40 : NaN;
 }
 function prodLycraPerShift(row) {
   return prodProductionFor({ ...row, stitchLength: prodLycraSlFor(row), needles: prodLycraNeedlesFor(row), feeders: prodLycraFeedersFor(row) }, 5315 / prodLycraDenierFor(row));
@@ -1115,15 +1119,29 @@ function prodHasLycra() {
 function prodHasFilament() {
   return !!(prodCalc.extras && prodCalc.extras[prodCalc.fabric] && prodCalc.extras[prodCalc.fabric].filament);
 }
+// A single machine has Lycra / Filament only where that machine was
+// actually given values. A blank Lycra / Filament column in the uploaded
+// file means no Lycra / Filament for that machine — even when other
+// machines in the same fabric have it. (A fabric whose name has "Lycra"
+// is a lycra fabric, so every machine has Lycra there.)
+function prodRowHasLycra(row) {
+  return prodCalc.fabric.includes("Lycra") || (row && Number.isFinite(prodNum(row.lycraDenier)) && prodNum(row.lycraDenier) > 0);
+}
+function prodRowHasFilament(row) {
+  return !!(row && Number.isFinite(prodNum(row.filamentDenier)) && prodNum(row.filamentDenier) > 0);
+}
 // Filament: a denier yarn with its own stitch length (like the filament in
 // 3 Thread Fleece: 75D, SL 2.75). Defaults match that filament.
 function prodFilamentDenierFor(row) {
   const v = prodNum(row && row.filamentDenier);
-  return Number.isFinite(v) && v > 0 ? v : 75;
+  // No default: a machine only has Filament where a denier was given.
+  // A blank Filament column in the uploaded file means no filament.
+  return Number.isFinite(v) && v > 0 ? v : NaN;
 }
 function prodFilamentSlFor(row) {
   const v = prodNum(row && row.filamentSl);
-  return Number.isFinite(v) && v > 0 ? v : 2.75;
+  if (Number.isFinite(v) && v > 0) return v;
+  return prodRowHasFilament(row) ? 2.75 : NaN;
 }
 function prodFilamentPerShift(row) {
   return prodProductionFor({ ...row, stitchLength: prodFilamentSlFor(row), needles: prodFilamentNeedlesFor(row), feeders: prodFilamentFeedersFor(row) }, 5315 / prodFilamentDenierFor(row));
@@ -1141,14 +1159,17 @@ function prodLycraDefaultSl() {
 }
 function prodLycraSlFor(row) {
   const v = prodNum(row && row.lycraSl);
-  return Number.isFinite(v) && v > 0 ? v : prodLycraDefaultSl();
+  if (Number.isFinite(v) && v > 0) return v;
+  return prodRowHasLycra(row) ? prodLycraDefaultSl() : NaN;
 }
 function prodLycraNeedlesFor(row) {
+  if (!prodRowHasLycra(row)) return NaN;
   const needles = prodNeedlesFor(row);
   const v = prodNum(row && row.lycraNeedles);
   return Number.isFinite(v) && v > 0 ? v : needles;
 }
 function prodLycraFeedersFor(row) {
+  if (!prodRowHasLycra(row)) return NaN;
   const feeders = prodNum(row && row.feeders);
   // Half feeder: Lycra runs on every other feeder, so it uses half the
   // machine's feeders. The needle count stays the machine's full count.
@@ -1159,11 +1180,13 @@ function prodLycraFeedersFor(row) {
   return Number.isFinite(v) && v > 0 ? v : feeders;
 }
 function prodFilamentNeedlesFor(row) {
+  if (!prodRowHasFilament(row)) return NaN;
   const needles = prodNeedlesFor(row);
   const v = prodNum(row && row.filamentNeedles);
   return Number.isFinite(v) && v > 0 ? v : needles;
 }
 function prodFilamentFeedersFor(row) {
+  if (!prodRowHasFilament(row)) return NaN;
   const feeders = prodNum(row && row.feeders);
   // Half feeder: Filament runs on every other feeder, so it uses half the
   // machine's feeders.
@@ -1481,6 +1504,43 @@ function prodToggleExtra(kind) {
   const cur = prodCalc.extras[prodCalc.fabric] || {};
   cur[kind] = !cur[kind];
   prodCalc.extras[prodCalc.fabric] = cur;
+  // The extra lives on the machine, not the fabric: switching it on
+  // writes its defaults into every machine that has no values yet, and
+  // switching it off clears the values, so a machine only ever carries
+  // an extra it was actually given.
+  const rows = prodRows();
+  if (cur[kind]) {
+    rows.forEach((row) => {
+      if (kind === "lycra") {
+        if (!Number.isFinite(prodNum(row.lycraDenier)) || prodNum(row.lycraDenier) <= 0) row.lycraDenier = 40;
+      } else if (!Number.isFinite(prodNum(row.filamentDenier)) || prodNum(row.filamentDenier) <= 0) {
+        row.filamentDenier = 75;
+      }
+    });
+  } else {
+    rows.forEach((row) => {
+      if (kind === "lycra") { delete row.lycraDenier; delete row.lycraSl; delete row.lycraNeedles; delete row.lycraFeeders; delete row.lycraFeederHalf; }
+      else { delete row.filamentDenier; delete row.filamentSl; delete row.filamentNeedles; delete row.filamentFeeders; delete row.filamentFeederHalf; }
+    });
+  }
+  saveProdCalc();
+  prodRenderExtraToggles();
+  renderProdTable();
+}
+// The ✕ on a Lycra / Filament row removes that extra from just that
+// machine, not from the whole fabric.
+function prodRemoveExtraRow(kind, i) {
+  const row = prodRows()[i];
+  if (!row) return;
+  if (kind === "lycra") { delete row.lycraDenier; delete row.lycraSl; delete row.lycraNeedles; delete row.lycraFeeders; delete row.lycraFeederHalf; }
+  else { delete row.filamentDenier; delete row.filamentSl; delete row.filamentNeedles; delete row.filamentFeeders; delete row.filamentFeederHalf; }
+  // If no machine carries this extra any more, switch its flag off too.
+  if (!prodCalc.extras) prodCalc.extras = {};
+  const cur = prodCalc.extras[prodCalc.fabric] || {};
+  const rows = prodRows();
+  if (kind === "lycra") cur.lycra = rows.some((r) => prodRowHasLycra(r));
+  else cur.filament = rows.some((r) => prodRowHasFilament(r));
+  prodCalc.extras[prodCalc.fabric] = cur;
   saveProdCalc();
   prodRenderExtraToggles();
   renderProdTable();
@@ -1505,8 +1565,6 @@ function renderProdTable() {
   if (!body) return;
   const rows = prodRows();
   const columns = prodColumns();
-  const isLycra = prodHasLycra();
-  const hasFilament = prodHasFilament();
   body.innerHTML = rows.map((row, i) => {
     const main = `
     <tr data-row="${i}">
@@ -1539,13 +1597,13 @@ function renderProdTable() {
       <td></td>
     </tr>`).join("");
     let extra = "";
-    if (isLycra) {
+    if (prodRowHasLycra(row)) {
       const denier = prodLycraDenierFor(row);
       extra += `
     <tr class="prod-lycra-table-row" data-lycra-row="${i}">
       ${columns.map((c) => {
         if (c.key === "machine") return `<td class="prod-lycra-label">${prodEsc(row.machine ?? i + 1)} · Lycra</td>`;
-        if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${denier}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
+        if (c.key === "count") return `<td><input data-field="lycraDenier" type="number" min="0" step="any" value="${prodValText(denier)}" placeholder="Denier"><div class="prod-lycra-count">= ${prodFmt(5315 / denier, 2)} Ne</div></td>`;
         if (c.key === "stitchLength") return `<td><input data-field="lycraSl" type="number" min="0" step="any" value="${prodValText(prodLycraSlFor(row))}"></td>`;
         if (c.key === "needles") return `<td><input data-field="lycraNeedles" type="number" min="0" step="1" value="${prodEsc(row.lycraNeedles ?? "")}" placeholder="auto"></td>`;
         if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-lycra-needles-used>${prodValText(prodLycraNeedlesFor(row))}</td>`;
@@ -1558,15 +1616,15 @@ function renderProdTable() {
       <td><button type="button" class="secondary prod-remove-lycra" data-row="${i}" title="Remove Lycra row">✕</button></td>
     </tr>`;
     }
-    if (hasFilament) {
+    if (prodRowHasFilament(row)) {
       const fDenier = prodFilamentDenierFor(row);
       const fSl = prodFilamentSlFor(row);
       extra += `
     <tr class="prod-filament-table-row" data-filament-row="${i}">
       ${columns.map((c) => {
         if (c.key === "machine") return `<td class="prod-filament-label">${prodEsc(row.machine ?? i + 1)} · Filament</td>`;
-        if (c.key === "count") return `<td><input data-field="filamentDenier" type="number" min="0" step="any" value="${fDenier}" placeholder="Denier"><div class="prod-filament-count">= ${prodFmt(5315 / fDenier, 2)} Ne</div></td>`;
-        if (c.key === "stitchLength") return `<td><input data-field="filamentSl" type="number" min="0" step="any" value="${fSl}"></td>`;
+        if (c.key === "count") return `<td><input data-field="filamentDenier" type="number" min="0" step="any" value="${prodValText(fDenier)}" placeholder="Denier"><div class="prod-filament-count">= ${prodFmt(5315 / fDenier, 2)} Ne</div></td>`;
+        if (c.key === "stitchLength") return `<td><input data-field="filamentSl" type="number" min="0" step="any" value="${prodValText(fSl)}"></td>`;
         if (c.key === "needles") return `<td><input data-field="filamentNeedles" type="number" min="0" step="1" value="${prodEsc(row.filamentNeedles ?? "")}" placeholder="auto"></td>`;
         if (c.key === "needlesUsed") return `<td class="prod-needles-used" data-filament-needles-used>${prodValText(prodFilamentNeedlesFor(row))}</td>`;
         if (c.key === "feeders") return `<td><input data-field="filamentFeeders" type="number" min="0" step="1" value="${prodValText(prodFilamentFeedersFor(row))}"><select data-field="filamentFeederMode" class="prod-feeder-mode" title="Filament feeders: Full or Half"><option value="full"${row.filamentFeederHalf ? "" : " selected"}>Full</option><option value="half"${row.filamentFeederHalf ? " selected" : ""}>Half</option></select></td>`;
@@ -1800,8 +1858,8 @@ function prodExportExcel() {
       const cnt = y.kind === "Denier" ? yv.denier : (Number.isFinite(yv.count) ? Number(yv.count.toFixed(2)) : "");
       return [cnt, Number.isFinite(yv.sl) ? Number(yv.sl.toFixed(2)) : "", Number.isFinite(yarnProd[i][j]) ? Number(yarnProd[i][j].toFixed(2)) : ""];
     }),
-    ...(isLycra ? [prodLycraDenierFor(row), Number.isFinite(prodLycraSlFor(row)) ? Number(prodLycraSlFor(row).toFixed(2)) : "", Number.isFinite(prodLycraNeedlesFor(row)) ? prodLycraNeedlesFor(row) : "", Number.isFinite(prodLycraFeedersFor(row)) ? prodLycraFeedersFor(row) : "", Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
-    ...(hasFilament ? [prodFilamentDenierFor(row), Number.isFinite(prodFilamentSlFor(row)) ? Number(prodFilamentSlFor(row).toFixed(2)) : "", Number.isFinite(prodFilamentNeedlesFor(row)) ? prodFilamentNeedlesFor(row) : "", Number.isFinite(prodFilamentFeedersFor(row)) ? prodFilamentFeedersFor(row) : "", Number.isFinite(filamentValues[i]) ? Number(filamentValues[i].toFixed(2)) : ""] : []),
+    ...(isLycra ? [Number.isFinite(prodLycraDenierFor(row)) ? prodLycraDenierFor(row) : "", Number.isFinite(prodLycraSlFor(row)) ? Number(prodLycraSlFor(row).toFixed(2)) : "", Number.isFinite(prodLycraNeedlesFor(row)) ? prodLycraNeedlesFor(row) : "", Number.isFinite(prodLycraFeedersFor(row)) ? prodLycraFeedersFor(row) : "", Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
+    ...(hasFilament ? [Number.isFinite(prodFilamentDenierFor(row)) ? prodFilamentDenierFor(row) : "", Number.isFinite(prodFilamentSlFor(row)) ? Number(prodFilamentSlFor(row).toFixed(2)) : "", Number.isFinite(prodFilamentNeedlesFor(row)) ? prodFilamentNeedlesFor(row) : "", Number.isFinite(prodFilamentFeedersFor(row)) ? prodFilamentFeedersFor(row) : "", Number.isFinite(filamentValues[i]) ? Number(filamentValues[i].toFixed(2)) : ""] : []),
   ]);
   const totalRow = columns.map((c, i) => i === 0 ? "Total" : "");
   totalRow.push(Number(total.toFixed(2)), ...yarnSpec.flatMap((y, j) => ["", "", Number(yarnTotals[j].toFixed(2))]), ...(isLycra ? ["", "", "", "", Number(lycraTotal.toFixed(2))] : []), ...(hasFilament ? ["", "", "", "", Number(filamentTotal.toFixed(2))] : []));
@@ -2033,12 +2091,13 @@ async function prodHandleUpload(file) {
     prodCalc.rows[prodCalc.fabric] = rows;
     if (!prodCalc.columns) prodCalc.columns = {};
     prodCalc.columns[prodCalc.fabric] = columns;
-    // If the file carries a Lycra or Filament value, switch that row on for
-    // this fabric — otherwise the imported values would stay invisible.
+    // The extra belongs to the machines that carry it: the flag follows
+    // the uploaded list, so a file with no Filament anywhere switches
+    // Filament off for this fabric instead of leaving it on.
     if (!prodCalc.extras) prodCalc.extras = {};
     const uploadedExtras = prodCalc.extras[prodCalc.fabric] || {};
-    if (rows.some((r) => ["lycraDenier", "lycraSl", "lycraNeedles", "lycraFeeders"].some((k) => Number.isFinite(prodNum(r[k])) && prodNum(r[k]) > 0))) uploadedExtras.lycra = true;
-    if (rows.some((r) => ["filamentDenier", "filamentSl", "filamentNeedles", "filamentFeeders"].some((k) => Number.isFinite(prodNum(r[k])) && prodNum(r[k]) > 0))) uploadedExtras.filament = true;
+    uploadedExtras.lycra = rows.some((r) => ["lycraDenier", "lycraSl", "lycraNeedles", "lycraFeeders"].some((k) => Number.isFinite(prodNum(r[k])) && prodNum(r[k]) > 0));
+    uploadedExtras.filament = rows.some((r) => ["filamentDenier", "filamentSl", "filamentNeedles", "filamentFeeders"].some((k) => Number.isFinite(prodNum(r[k])) && prodNum(r[k]) > 0));
     prodCalc.extras[prodCalc.fabric] = uploadedExtras;
     saveProdCalc();
     prodRenderExtraToggles();
@@ -4726,10 +4785,12 @@ $("#prodTableBody")?.addEventListener("change", (event) => {
   prodRecalcRow(idx);
 });
 $("#prodTableBody")?.addEventListener("click", (event) => {
-  // The ✕ on a Lycra / Filament row removes that row for this fabric
-  // (the same as switching its button off).
-  if (event.target.closest(".prod-remove-lycra")) { prodToggleExtra("lycra"); return; }
-  if (event.target.closest(".prod-remove-filament")) { prodToggleExtra("filament"); return; }
+  // The ✕ on a Lycra / Filament row removes that extra from just that
+  // machine, not from the whole fabric.
+  const lycraBtn = event.target.closest(".prod-remove-lycra");
+  if (lycraBtn) { prodRemoveExtraRow("lycra", Number(lycraBtn.dataset.row)); return; }
+  const filBtn = event.target.closest(".prod-remove-filament");
+  if (filBtn) { prodRemoveExtraRow("filament", Number(filBtn.dataset.row)); return; }
   const btn = event.target.closest(".prod-remove-row");
   if (!btn) return;
   const rows = prodRows();
