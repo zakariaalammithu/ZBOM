@@ -4665,6 +4665,7 @@ $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNu
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
 $("#prodQuickDownloadBtn")?.addEventListener("click", prodExportExcel);
 $("#prodQuickUploadBtn")?.addEventListener("click", () => $("#prodQuickUploadInput")?.click());
+$("#prodQuickExampleBtn")?.addEventListener("click", prodDownloadTemplate);
 $("#prodQuickUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
 $("#prodMachineToggle")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.toggle("hidden"); prodRenderMachinePresets(); });
 $("#prodMachineClose")?.addEventListener("click", () => { $("#prodMachinePanel")?.classList.add("hidden"); });
