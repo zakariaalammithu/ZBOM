@@ -294,7 +294,7 @@
             <button class="secondary" id="prodInputToggle" type="button">Input Name</button>
             <button class="secondary" id="prodQuickDownloadBtn" type="button" title="Download the current fabric's machines as an Excel file (values only)">Download Excel</button>
             <button class="secondary" id="prodQuickUploadBtn" type="button" title="Upload an Excel file to replace the current fabric's machines">Upload Excel</button>
-            <input type="file" id="prodQuickUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
+            <input type="file" id="prodQuickUploadInput" accept=".xlsx,.xls,.csv" class="prod-file-input">
           </div>
           <div class="prod-calc-factor-row">
             <label>Production factor<input id="prodFactor" type="number" min="0.1" step="0.1" value="1"></label>
@@ -312,7 +312,7 @@
             <div class="prod-input-actions">
               <button class="secondary" id="prodDownloadTemplateBtn" type="button">Download Template</button>
               <button class="primary" id="prodUploadBtn" type="button">Upload Excel</button>
-              <input type="file" id="prodUploadInput" accept=".xlsx,.xls,.csv" class="hidden">
+              <input type="file" id="prodUploadInput" accept=".xlsx,.xls,.csv" class="prod-file-input">
               <button class="secondary" id="prodDownloadExcelBtn" type="button">Download Report</button>
             </div>
             <div id="prodImportReport"></div>

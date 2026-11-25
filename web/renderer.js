@@ -1619,7 +1619,7 @@ function prodRecalcRow(i) {
 // Extra columns have no effect on the calculation — they are kept and
 // returned in the export, in the same order they were uploaded. The export
 // adds a "Production / Shift (kg)" column plus a separate "Production" sheet.
-const PROD_NEEDLES_COLUMN = { key: "needles", label: "Needles (own — blank = auto)", match: ["needles", "needle", "no of needles", "no. of needles", "needle count", "total needles", "needles (own)", "needles (own — blank = auto)", "needles own"] };
+const PROD_NEEDLES_COLUMN = { key: "needles", label: "Needles (own — blank = auto)", match: ["needles", "needle", "no of needles", "no. of needles", "needle count", "total needles", "needles (own)", "needles (own — blank = auto)", "needles own", "needles (optional)"] };
 const PROD_NEEDLES_USED_COLUMN = { key: "needlesUsed", label: "Needles (used)", match: ["needles (used)", "needles used", "used needles"] };
 const PROD_IMPORT_COLUMNS = [
   { key: "machine", label: "M/C No", match: ["m/c no", "machine", "m/c", "mc no", "m/c no."] },
@@ -1717,37 +1717,31 @@ function prodXlsxMime() { return "application/vnd.openxmlformats-officedocument.
 function prodDownloadTemplate() {
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const wb = window.XLSX.utils.book_new();
-  const header = prodDefaultColumns().map((c) => c.label);
-  // Multi-yarn fabrics get one Count + Stitch Length column pair per extra
-  // yarn, ready to fill — their productions add to the machine's total.
+  // The template follows the user's file layout, yarns first:
+  // Yarn Count, Yarn Stitch Length, then each extra yarn (Count/Denier +
+  // Stitch Length), then Filament Denier + Stitch Length, Lycra Denier +
+  // Stitch Length, then Dia, Gauge, No of Feeder, RPM, Needles (optional).
+  // Filament and Lycra columns are always in the template.
+  const header = ["M/C No", "Yarn Count (Ne)", "Stitch Length (mm)"];
   const yarnSpec = (PROD_MULTI_YARN[prodCalc.fabric] || {}).extra || [];
   yarnSpec.forEach((y) => {
     header.push(y.kind === "Denier" ? `${y.label} Denier (D)` : `${y.label} Count (Ne)`, `${y.label} Stitch Length (mm)`);
   });
-  // A Lycra or Filament row switched on for this fabric gets its own
-  // columns, so the values round-trip through upload and download.
-  if (prodHasLycra()) header.push("Lycra Denier (D)", "Lycra Stitch Length (mm)", "Lycra Needles", "Lycra No of Feeder");
-  if (prodHasFilament()) header.push("Filament Denier (D)", "Filament Stitch Length (mm)", "Filament Needles", "Filament No of Feeder");
+  header.push("Filament Denier (D)", "Filament Stitch Length (mm)", "Lycra Denier (D)", "Lycra Stitch Length (mm)", "Dia (inch)", "Gauge", "No of Feeder", "RPM", "Needles (optional)");
   // Two example machines, so a new person sees exactly what to fill in
-  // and can upload the file as it is. The values are the sample machine
-  // and a second machine with different settings; the extra-yarn, Lycra
-  // and Filament columns use this fabric's defaults.
+  // and can upload the file as it is. The Lycra stitch length uses the
+  // fabric default (0.90 for jersey, 0.05 for Rib / Interlock).
+  const lycraSl = prodLycraDefaultSl();
   const exampleMachines = [
-    { machine: "1", count: 50, stitchLength: 2.2, dia: 30, gauge: 28, needles: "", feeders: 96, rpm: 25 },
-    { machine: "2", count: 30, stitchLength: 2.6, dia: 32, gauge: 24, needles: "", feeders: 72, rpm: 22 },
+    { machine: "1", count: 24, stitchLength: 4.4, filamentDenier: 75, filamentSl: 2.75, lycraDenier: 70, lycraSl, dia: 30, gauge: 28, feeders: 96, rpm: 25 },
+    { machine: "2", count: 30, stitchLength: 2.6, filamentDenier: 150, filamentSl: 2.7, lycraDenier: 40, lycraSl, dia: 32, gauge: 24, feeders: 72, rpm: 22 },
   ];
-  const baseCols = prodDefaultColumns();
   const exampleRows = exampleMachines.map((m) => {
-    const vals = baseCols.map((c) => {
-      if (c.key === "machine") return m.machine;
-      if (c.key === "needles") return "";
-      return m[c.key] ?? "";
-    });
+    const vals = [m.machine, m.count, m.stitchLength];
     yarnSpec.forEach((y) => {
       vals.push(y.kind === "Denier" ? y.denier : y.count, y.sl);
     });
-    if (prodHasLycra()) vals.push(40, m.stitchLength, "", "");
-    if (prodHasFilament()) vals.push(75, 2.75, "", "");
+    vals.push(m.filamentDenier, m.filamentSl, m.lycraDenier, m.lycraSl, m.dia, m.gauge, m.feeders, m.rpm, "");
     return vals;
   });
   const ws = window.XLSX.utils.aoa_to_sheet([header, ...exampleRows]);
@@ -1763,9 +1757,9 @@ function prodDownloadTemplate() {
     ["Production / Shift (kg) is calculated by ZBOM when you upload — do not add it."],
     ["Needles is the total needle count (dial + cylinder). You can leave it blank — ZBOM works it out from Dia x Gauge x factor — or type your own needle count (for example for a 2x2 rib with fewer needles). If you type Needles, Dia and Gauge can be left blank."],
     ["You can add your own columns after these input columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file."],
-    ["For Lycra fabrics, a Lycra row appears below each machine in the app — enter the denier there (for example 40); the lycra count and production are calculated automatically."],
-    ["The Lycra and Filament buttons add the same rows below each machine of any other fabric (for example Rib). When a button is on, its denier column is in the template; a Filament row also has its own Stitch Length column."],
-    ["For multi-yarn fabrics (Fleece, 2/3 Thread Fleece, French Terry, Terry Velour, Lycra Fleece, Polar Fleece), each extra yarn has its own Count + Stitch Length columns in the template — their productions add to the machine's total."],
+    ["Filament and Lycra are optional — fill Denier and Stitch Length only for machines that use them, and leave them blank otherwise."],
+    ["Lycra Stitch Length: leave it blank and ZBOM uses 0.90 for jersey fabrics and 0.05 for Rib / Interlock; type any value to use your own."],
+    ["For multi-yarn fabrics (Fleece, 2/3 Thread Fleece, French Terry), each extra yarn has its own Count + Stitch Length columns right after the main yarn — their productions add to the machine's total."],
     ["Save the file, then upload it with the Upload button in Production Calculation."],
   ]);
   readme["!cols"] = [{ wch: 95 }];
