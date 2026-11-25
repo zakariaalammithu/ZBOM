@@ -2,8 +2,12 @@
 // Fabric Material master ("Fabric Material code-.xlsx", sheet "Mastar
 // file": 103,710 rows x 17 columns).
 //
-// Case-insensitive substring match across all columns of a row, same
-// matching rule as the desktop renderer filterRows()/rowMatchesQuery().
+// Multi-term match across all columns of a row, same matching rule as
+// the desktop renderer filterRows()/rowMatchesQuery(): the query is split
+// into terms (a "quoted phrase" stays one term) and a row matches when
+// EVERY term matches SOME column value, so terms from different columns
+// combine (e.g. "S/J 40/1" finds a row whose DESCRIPTION has S/J and whose
+// yarn-count column has 40/1).
 // Returns at most `limit` rows (default 50, max 100) plus the total match
 // count — the full 103,710-row master is NEVER sent to the browser.
 //
@@ -44,7 +48,45 @@ const CHUNK_FILE = /^materials-index-(\d+)\.json$/;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
-let cache = null; // { columns, rows, searchText, generatedAt, sourceRows, chunksLoaded }
+// Matching rule — identical to the desktop renderer (renderer.js:
+ // normalizedSearchText / searchValueMatches / searchTerms /
+ // rowMatchesQuery). `text` is a pre-normalized cell value and `term` a
+ // pre-normalized search term (see searchValues, built once in loadIndex).
+ function normalizedSearchText(value) {
+   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+ }
+
+ function searchValueMatchesNormalized(text, term) {
+   if (!term) return true;
+   if (/^\d+(?:\.\d+)?$/.test(term)) {
+     const compactNumber = text.replace(/,/g, "");
+     if (/^\d+(?:\.\d+)?$/.test(compactNumber)) return compactNumber === term;
+     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+     return new RegExp(`(^|[^0-9.])${escaped}([^0-9.]|$)`).test(text);
+   }
+   return text.includes(term)
+     || text.replace(/\s+/g, "").includes(term.replace(/\s+/g, ""));
+ }
+
+ function searchTerms(query) {
+   const terms = [];
+   const expression = /"([^"]+)"|(\S+)/g;
+   let match;
+   while ((match = expression.exec(String(query || ""))) !== null) {
+     const term = normalizedSearchText(match[1] || match[2]);
+     if (term) terms.push(term);
+   }
+   return terms;
+ }
+
+ function rowMatchesTerms(values, terms) {
+   if (!terms.length) return true;
+   return terms.every((term) =>
+     values.some((value) => searchValueMatchesNormalized(value, term)),
+   );
+ }
+
+let cache = null; // { columns, rows, searchValues, generatedAt, sourceRows, chunksLoaded }
 
 function loadIndex() {
   if (cache) return cache;
@@ -102,9 +144,10 @@ function loadIndex() {
     generatedAt,
     sourceRows,
     chunksLoaded: loaded,
-    // One lowercase searchable string per row, built once.
-    searchText: rows.map((row) =>
-      row.map((value) => String(value ?? "")).join(" ").toLowerCase(),
+    // One normalized (lowercase, single spaces) value list per row, built
+    // once, so a search never re-normalizes the same cell.
+    searchValues: rows.map((row) =>
+      row.map((value) => normalizedSearchText(value)),
     ),
   };
   return cache;
@@ -158,7 +201,7 @@ module.exports = (req, res) => {
   if (!Number.isFinite(limit) || limit < 1) limit = DEFAULT_LIMIT;
   if (limit > MAX_LIMIT) limit = MAX_LIMIT;
 
-  const { columns, rows, searchText } = index;
+  const { columns, rows, searchValues } = index;
   const matches = [];
   if (!q) {
     for (let i = 0; i < rows.length && matches.length < limit; i++) matches.push(i);
@@ -174,9 +217,10 @@ module.exports = (req, res) => {
     return;
   }
 
+  const terms = searchTerms(q);
   let total = 0;
   for (let i = 0; i < rows.length; i++) {
-    if (searchText[i].includes(q)) {
+    if (rowMatchesTerms(searchValues[i], terms)) {
       total += 1;
       if (matches.length < limit) matches.push(i);
     }
