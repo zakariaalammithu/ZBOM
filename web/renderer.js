@@ -1752,20 +1752,12 @@ function prodDownloadTemplate() {
   window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
   const readme = window.XLSX.utils.aoa_to_sheet([
     ["How to use this template"],
-    ["Rows 2 and 3 are examples — edit them, delete them, or add more machines below. Fill one machine per row."],
-    ["You can upload this file as it is — the example machines are valid and will replace the current list for this fabric."],
+    ["Fill one machine per row. Rows 2 and 3 are examples — edit, delete, or add more."],
     ["Do not change the header names in row 1."],
-    ["M/C No can be a number or a name."],
-    ["All other columns must be numbers greater than 0."],
-    ["Production / Shift (kg) is calculated by ZBOM when you upload — do not add it."],
-    ["Needles is the total needle count (dial + cylinder). You can leave it blank — ZBOM works it out from Dia x Gauge x factor — or type your own needle count (for example for a 2x2 rib with fewer needles). If you type Needles, Dia and Gauge can be left blank."],
-    ["You can add your own columns after these input columns (for example Color, Balancer Qty, Operator Name) — they have no effect on the calculation, and they are kept and returned in the downloaded Excel file."],
-    ["Filament and Lycra are optional — fill Denier and Stitch Length only for machines that use them, and leave them blank otherwise."],
-    ["Lycra Stitch Length: leave it blank and ZBOM uses 0.90 for jersey fabrics and 0.05 for Rib / Interlock; type any value to use your own."],
-    ["For multi-yarn fabrics (Fleece, 2/3 Thread Fleece, French Terry), each extra yarn has its own Count + Stitch Length columns right after the main yarn — their productions add to the machine's total."],
-    ["Save the file, then upload it with the Upload button in Production Calculation."],
+    ["Needles is optional — leave blank and ZBOM works it out."],
+    ["Save, then upload with Upload Excel in Production Calculation."],
   ]);
-  readme["!cols"] = [{ wch: 95 }];
+  readme["!cols"] = [{ wch: 85 }];
   window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
   const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
   prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
@@ -2568,15 +2560,11 @@ function fleeceDownloadExcel() {
   window.XLSX.utils.book_append_sheet(wb, ws, "Yarn Calculation");
   const readme = window.XLSX.utils.aoa_to_sheet([
     ["How to use this file"],
-    ["This file has VALUES ONLY — no formulas. Ratio, Consuming % and Yarn Qty are calculated by ZBOM when you upload it again."],
-    ["Edit the input columns (Yarn, Yarn Count, Cotton %, Poly %, Others %, Feeder, Stitch Length) and upload the file with the Upload Excel button in Yarn Calculation."],
-    ["Do not change the header names in the header row."],
-    ["Count Kind: Ne = cotton count (Ne), Denier = denier (D), Lycra = lycra denier (D), Mirror = follows the first yarn's count (leave Yarn Count blank)."],
-    ["The uploaded yarns replace the current fabric's yarns. The fabric is the one selected in Yarn Calculation when you upload."],
-    ["You can add more yarn rows (up to 8) or delete rows — the first 8 yarns are kept."],
-    ["Total Fabric Qty (KG) in row 2 is read on upload and set for the fabric."],
+    ["Values only — no formulas. Edit the input columns, then upload with Upload Excel in Yarn Calculation."],
+    ["Do not change the header names."],
+    ["Uploading replaces the current fabric's yarns (up to 8 yarns)."],
   ]);
-  readme["!cols"] = [{ wch: 110 }];
+  readme["!cols"] = [{ wch: 100 }];
   window.XLSX.utils.book_append_sheet(wb, readme, "Read Me");
   const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const safe = fabric.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "Fabric";
