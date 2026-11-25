@@ -1,0 +1,903 @@
+{
+ "source": {
+  "file": "Finsih Type Short Name.xlsx",
+  "sheet": "Sheet1"
+ },
+ "columns": [
+  "Short Name",
+  "Full Name",
+  "Remarks"
+ ],
+ "rows": [
+  [
+   "I/B",
+   "INSIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/W",
+   "GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F",
+   "PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W",
+   "BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP",
+   "ALL OVER PRONT",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D",
+   "GARMENT DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "LO/F",
+   "LONDI FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "L/F",
+   "LYCRA FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "O/D",
+   "OVER DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "ACID/W",
+   "ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/SPRAY",
+   "GARMENT SPRAY",
+   "FINISH TYPE"
+  ],
+  [
+   "B/O",
+   "BURN OUT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "COT F",
+   "COTTON FELL",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "S/W",
+   "SPERY WASH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "BIO/F",
+   "BIOPOLISH FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R",
+   "WATER REPLENT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "A/F",
+   "ANTIPILLING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "B-P/F",
+   "BACK SIDE PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "T/D",
+   "TUMBLE DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "D/M",
+   "YARN & FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "SING",
+   "FABRIC SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/SING",
+   "YARN SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F-MER",
+   "FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/MER",
+   "YARN MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "H/PIQUE",
+   "HONEY COMBED PIQUE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+F/MER",
+   "YARN SINGING, FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "BS/P",
+   "BOTH SIDE PEACH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/S+F/MER",
+   "FABRIC SINGING, FABRIC MERCH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F-S+D/M",
+   "FABRIC SINGING, FABRIC D/MERCH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+MER",
+   "YARN SINGING, FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "SI/F",
+   "SILICON FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MER-MM",
+   "MERCERIZED WITH MOISTURE MANAGEMENT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "H/MER",
+   "HALF MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "CPL",
+   "CUT PANEL WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "SING+P/S",
+   "SINGING, PERMANENT SOFTENER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "B/P",
+   "BIO POLISHED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "P/F-BS",
+   "P/F (BOTH SIDE)",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "COOL/COM",
+   "COOL COMPORT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "SANF",
+   "SANFORIZE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "A/O",
+   "ANTI ODOR",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "P/T",
+   "PAPER TUCH FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ODM",
+   "OVERDYED MEL",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "AR/F",
+   "AIRCOOL FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "A/B",
+   "ANTI BACTERIAL",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ABM W/F",
+   "ANTI BACTERIAL MOISTURE WICKING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ANTI ODOR",
+   "ANTI ODOR",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "AN-O",
+   "ANTI ODOR",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "BES",
+   "BESOSTRETCH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "BA/F",
+   "BIOCIDE ANTIODOUR FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "COL",
+   "COLORO",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIP DYE",
+   "DIP DYE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIS",
+   "DISCHARGEABLE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F-D/M",
+   "FABRIC D/MERCH.",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "HALF MER",
+   "HALF MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "L/B",
+   "LIGHT BRUSH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MER",
+   "FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "M/F",
+   "MIDORI FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MM",
+   "MOISTURE MANAGEMENT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "QUICK DRY",
+   "QUICK DRY",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "S/F",
+   "SILKY FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "TAI DYE",
+   "TAI DYE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "T/F",
+   "TEFRON FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "TD",
+   "TRANSDRY",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/F",
+   "WICKING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S",
+   "YARN SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "A/W+O/D",
+   "AFTER WASH, OVER DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "A/F+G/W",
+   "ANTIPILLING FINISH, GARMENT WASH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "AOP+A/W",
+   "ALL OVER PRONT, AFTER WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+B/W",
+   "ALL OVER PRONT, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+B/W+G/W",
+   "ALL OVER PRONT, BLOCK WASH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+DIP DYE",
+   "ALL OVER PRINT, DIP DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+G/D",
+   "ALL OVER PRONT, GARMENT DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+G/D+ACID/W",
+   "ALL OVER PRONT, GARMENT DYE, ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+G/W",
+   "ALL OVER PRONT, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+I/B",
+   "ALL OVER PRONT, INSIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+I/B+B/W",
+   "ALL OVER PRONT, INSIDE BRUSH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+I/B+G/W",
+   "ALL OVER PRONT, INSIDE BRUSH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+I/B+P/F",
+   "ALL OVER PRONT, INSIDE BRUSH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+P/F",
+   "ALL OVER PRONT, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+P/F+B/W",
+   "ALL OVER PRONT, PEACH FINISH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+P/F+G/W",
+   "ALL OVER PRONT, PEACH FINISH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+P/F+I/B",
+   "ALL OVER PRONT, PEACH FINISH, INSIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+T/D",
+   "ALL OVER PRONT, TUMBLE DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "AOP+W/F",
+   "ALL OVER PRONT, WAIKING FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+ACID/W",
+   "BLOCK WASH, ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+G/D",
+   "BLOCK WASH, GARMENT DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+G/SPRAY",
+   "BLOCK WASH, GARMENT SPARY",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+G/W",
+   "BLOCK WASH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+P/F",
+   "BLOCK WASH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "B/W+S/W",
+   "BLOCK WASH, SPERY WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "D/M+DIS",
+   "DOUBLE MERCERIZED, DISCHARGEABLE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "D/M+S/F",
+   "DOUBLE MERCERIZED, SILKY FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIS+B/P",
+   "DISCHARGEABLE, BIO POLISHED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIS+BA/F",
+   "DISCHARGEABLE, BIOCIDE ANTIODOUR FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/S+D/M",
+   "FABRIC SINGING, DOUBLE MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/S+F/M",
+   "FABRIC SINGING, MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/S+F-D/M",
+   "FABRIC SINGING, FABRIC DOUBLE MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/SINGING+F/MER",
+   "FABRIC SINGING, FABRIC MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "G/D+A/W",
+   "GARMENT DYE, AFTER WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+ACID/W",
+   "GARMENT DYE, ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+B/W",
+   "GARMENT DYE, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+B/W+ACID/W",
+   "GARMENT DYE, BLOCK WASH, ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+G/W",
+   "GARMENT DYE, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+TAI DYE",
+   "GARMENT DYE, TAI DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "G/D+TIE DYE",
+   "GARMENT DYE, TAI DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "G/W+AOP",
+   "GARMENT WASH, ALL OVER PRINT",
+   "FINISH TYPE"
+  ],
+  [
+   "G/W+B/W",
+   "GARMENT WASH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "G/W+P/F",
+   "GARMENT WASH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "GD+G/W",
+   "GARMENT DYE, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+ACID/W",
+   "INSIDE BRUSH, ACID WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+B/W",
+   "INSIDE BRUSH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+B/W+G/SPRAY",
+   "INSIDE BRUSH, BLOCK WASH, GARMENT SPRAY",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+CPL",
+   "INSIDE BRUSH, CUT PANEL WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/D",
+   "INSIDE BRUSH, GARMENT DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/D+G/W",
+   "INSIDE BRUSH, GARMENT DYE, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/D+TIE DYE",
+   "INSIDE BRUSH, GARMENT DYE, TIE DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/SPRAY",
+   "INSIDE BRUSH, GARMENT SPRAY",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/W",
+   "INSIDE BRUSH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+G/W+P/F",
+   "INSIDE BRUSH, GARMENT WASH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+P/F",
+   "INSIDE BRUSH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+P/F+G/D",
+   "INSIDE BRUSH, PEACH FINISH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+T/D",
+   "INSIDE BRUSH, TUMBLE DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "I/B+W/R",
+   "INSIDE BRUSH, WATER REPLENT",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "I/B+W/R+B/W",
+   "INSIDE BRUSH, WATER REPLENT, BLOCK WASH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "L/F+G/W",
+   "LYCRA FINISH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "MER+DIS",
+   "MERCERIZED, DISCHARGEABLE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MER+SANF",
+   "MERCERIZED, SANFORIZE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "O/D+A/W",
+   "OVER DRY, AFTER WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "O/D+G/W",
+   "OVER DRY, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+B/W",
+   "PEACH FINISH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+B/W+G/SPRAY",
+   "PEACH FINISH, BLOCK WASH, GARMENT SPRAY",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+CPL",
+   "PEACH FINISH, CUT PANEL WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+G/D",
+   "PEACH FINISH, GARMENT DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+G/D+G/W",
+   "PEACH FINISH, GARMENT DYE, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+G/W",
+   "PEACH FINISH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B",
+   "PEACH FINISH, INSIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B+ANT/F",
+   "PEACH FINISH, INSIDE BRUSH, ANTIPILLING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "P/F+I/B+B/W",
+   "PEACH FINISH, INSIDE BRUSH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B+B/W+ANT/F",
+   "PEACH FINISH, INSIDE BRUSH, GARMENT WASH, ANTIPILLING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "P/F+I/B+CPL",
+   "PEACH FINISH, INSIDE BRUSH, CUT PANEL WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B+G/D",
+   "PEACH FINISH, INSIDE BRUSH, GARMENT DYE",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B+G/D+G/W",
+   "PEACH FINISH, INSIDE BRUSH, GARMENT DYE, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+I/B+G/W",
+   "PEACH FINISH, INSIDE BRUSH, GARMENT WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F+T/D",
+   "PEACH FINISH, TUMBLE DRY",
+   "FINISH TYPE"
+  ],
+  [
+   "P/F-BS+CPL",
+   "PEACH FINISH BOTH SIDE, CUT PANEL WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "W/F+B/W",
+   "WICKING FINISH, BLOCK WASH",
+   "FINISH TYPE"
+  ],
+  [
+   "W/F+I/B",
+   "WICKING FINISH, INSIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "W/F+P/F",
+   "WICKING FINISH, PEACH FINISH",
+   "FINISH TYPE"
+  ],
+  [
+   "W/R+B/W",
+   "WATER REPLENT, BLOCK WASH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+Y/MER",
+   "YARN SINGING, YARN MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+F/HALF MER",
+   "YARN SINGING, FABRIC HALF MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y+F/SING",
+   "YARN, FABRIC SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R+MER",
+   "WATER REPLENT, MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R+D/M",
+   "WATER REPLENT, DUBLE MERCERIZED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ANT/F",
+   "ANTIPILLING FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ODM+SING",
+   "OVERDYED MEL, SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R+SING",
+   "WATER REPLENT, SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "SING",
+   "SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S",
+   "Y/SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y+F/SING",
+   "Y+F/SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R MER",
+   "WATER REPLENT+MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R+D/M",
+   "WATER REPLENT+D/M",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "P/T",
+   "PAPER TUCH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "ODM SING",
+   "OVERDYED MEL+SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+F/M",
+   "Y/S+F/MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "W/R SING",
+   "WATER REPLENT+SINGING",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "Y/S+F/H M",
+   "Y/S+F/HALF MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "F/S+F/M",
+   "F/SINGING+F/MER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "D/M+S/F",
+   "D/M+SILKY FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "D/M+DIS",
+   "D/M+DISCHARGEABLE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MER+DIS",
+   "MER+DISCHARGEABLE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "MER+SANF",
+   "MER+SANFORIZE",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIS+BA/F",
+   "DISCHARGEABLE+BIOCIDE ANTIODOUR FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "SING+P/S",
+   "SINGING+PERMANENT SOFTENER",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "L/F",
+   "LIVINGUARD FINISH",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "DIS+B/P",
+   "DISCHARGEABLE+BIO POLISHED",
+   "SPECIAL TREATMENT"
+  ],
+  [
+   "T/B",
+   "TOP SIDE BRUSH",
+   "FINISH TYPE"
+  ],
+  [
+   "A/O,Q/D,E/C",
+   "ANTI ODOR,QUICK DRY,EASY CARE",
+   "SPECIAL TREATMENT"
+  ]
+ ]
+}

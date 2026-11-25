@@ -187,6 +187,30 @@
     var snapshot = emptySnapshot();
     snapshot.materials = materials;
     snapshot.sources = (meta.snapshot && meta.snapshot.sources) || snapshot.sources;
+    // Finish Type + Code Requirement template data are small static JSON
+    // files under /web/masters-data/ (built from the desktop seed
+    // workbooks). They load for everyone, guests included; a failed load
+    // just leaves that view empty instead of breaking the page.
+    var codeRequirementPreview = { rows: [], file: "", sheetName: "" };
+    try {
+      var finishTypeData = await fetchMasterJson("/web/masters-data/finish-type.json");
+      snapshot.finishType = (finishTypeData.rows || []).map(function (row) {
+        var obj = {};
+        (finishTypeData.columns || []).forEach(function (column, i) { obj[column] = row[i] ?? ""; });
+        return obj;
+      });
+      snapshot.sources.finishType = { filename: "Finsih Type Short Name.xlsx", sheet: "Sheet1", modifiedAt: null };
+    } catch (error) { /* leave the Finish Type page empty */ }
+    try {
+      var previewData = await fetchMasterJson("/web/masters-data/code-requirement-preview.json");
+      codeRequirementPreview = {
+        rows: Array.isArray(previewData.rows) ? previewData.rows : [],
+        file: previewData.file || "Code Requirement.xlsx",
+        sheetName: previewData.sheetName || "",
+        worksheetRange: previewData.worksheetRange || "",
+        columnWidths: previewData.columnWidths || [],
+      };
+    } catch (error) { /* leave the preview empty */ }
     // Phase 2-lite: /api/state returns the main-admin access object when
     // the session token is valid; otherwise it returns guest. Trust the
     // server's answer — never upgrade the role in the browser.
@@ -202,7 +226,7 @@
       usageAnalytics: [],
       authenticated: authenticated,
       profileImageDataUrl: "",
-      codeRequirementPreview: { rows: [], file: "", sheetName: "" },
+      codeRequirementPreview: codeRequirementPreview,
     };
   }
 
@@ -1060,7 +1084,21 @@
     clearMasterSection: async function () { return notAvailable(); },
     uploadDepartmentFile: async function () { return notAvailable(); },
     saveDepartmentFile: async function () { return notAvailable(); },
-    downloadResource: async function () { return notAvailable(); },
+    // The Code Requirement template is a free download for everyone,
+    // like the upload modules. The workbook is a static file under
+    // /web/masters-data/ (a copy of the desktop seed workbook).
+    downloadResource: async function (resourceId) {
+      if (resourceId !== "codeRequirement") return notAvailable();
+      try {
+        var res = await fetch("/web/masters-data/code-requirement.xlsx");
+        if (!res.ok) return { ok: false, message: "Code Requirement template is not available. Please reload the page and try again." };
+        var blob = await res.blob();
+        triggerDownload(blob, "Code Requirement.xlsx");
+        return { ok: true, message: "Code Requirement file downloaded.", path: "Code Requirement.xlsx" };
+      } catch (error) {
+        return { ok: false, message: "Code Requirement template is not available. Please reload the page and try again." };
+      }
+    },
     saveSubAdmin: async function () { return notAvailable(); },
     manageSubAdmin: async function () { return notAvailable(); },
     changeAccountRole: async function () { return notAvailable(); },

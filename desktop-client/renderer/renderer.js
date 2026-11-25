@@ -549,11 +549,12 @@ function renderCodeRequirementPreview() {
 
 function renderRoutingState() {
   const routing = state.routing || {};
+  const isFullAdmin = state.access.role === "admin" || state.access.role === "main_admin";
   const serviceReady = routing.masterReady;
   $("#routingMasterStatus").textContent = serviceReady ? "Ready" : "Not Available";
   $("#routingMasterStatus").classList.toggle("not-ready", !serviceReady);
   $("#routingMasterDate").textContent = routing.masterUpdatedAt ? `Template updated ${formatDate(routing.masterUpdatedAt)}` : "Secured routing template";
-  $("#routingAdminMaster").classList.toggle("hidden", !routing.canManageMaster);
+  $("#routingAdminMaster").classList.toggle("hidden", !isFullAdmin);
   $("#routingMasterAdminInfo").textContent = routing.masterFile
     ? `${routing.masterFile} · Updated ${formatDate(routing.masterUpdatedAt)}`
     : "Only Admin can view or replace this secured backend workbook.";
@@ -616,6 +617,7 @@ async function refreshZkngState() {
 
 function renderLsmwBomState() {
   const lsmwBom = state.lsmwBom || {};
+  const isFullAdmin = state.access.role === "admin" || state.access.role === "main_admin";
   const serviceReady = lsmwBom.masterReady !== false;
   if ($("#lsmwBomServiceStatus")) {
     $("#lsmwBomServiceStatus").textContent = serviceReady ? "Ready" : "Not Available";
@@ -624,7 +626,7 @@ function renderLsmwBomState() {
   if ($("#lsmwBomServiceDate")) {
     $("#lsmwBomServiceDate").textContent = lsmwBom.masterUpdatedAt ? `Rules updated ${formatDate(lsmwBom.masterUpdatedAt)}` : "Secured BOM rules";
   }
-  if ($("#lsmwBomAdminMaster")) $("#lsmwBomAdminMaster").classList.toggle("hidden", !lsmwBom.canManageMaster);
+  if ($("#lsmwBomAdminMaster")) $("#lsmwBomAdminMaster").classList.toggle("hidden", !isFullAdmin);
   if ($("#lsmwBomMasterAdminInfo")) $("#lsmwBomMasterAdminInfo").textContent = lsmwBom.masterFile ? `${lsmwBom.masterFile} · Updated ${formatDate(lsmwBom.masterUpdatedAt)}` : "LSMW BOM Master is ready.";
   if ($("#importLsmwBomMaterial")) $("#importLsmwBomMaterial").disabled = !lsmwBom.canImport;
   if ($("#clearLsmwBomMaterial")) $("#clearLsmwBomMaterial").disabled = false;
@@ -4476,7 +4478,9 @@ async function submitRegistration() {
 }
 
 async function downloadResource(resourceId) {
-  if (!state.authenticated) {
+  // The Code Requirement template is free for everyone, like the upload
+  // modules — guests may download it without signing in.
+  if (!state.authenticated && resourceId !== "codeRequirement") {
     showNotice("Create an account or sign in before downloading this file.", "warning");
     openAdminLogin();
     return;
