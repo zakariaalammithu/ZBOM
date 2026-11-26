@@ -8,8 +8,9 @@ const { spawn } = require("node:child_process");
 const JSZip = require("jszip/dist/jszip.js");
 const XLSX = require("xlsx");
 
-const DEFAULT_SHARE = "\\\\172.26.43.3\\ZKNG- Material code\\ZBOM";
+const DEFAULT_SHARE = "\\\\squaregroup.com\\bigdata\\DATABANK\\SFLFU1\\Knitting\\sflfu-erplap-1\\ZBOM";
 const PREVIOUS_SHARE = "\\\\172.26.43.3\\ZKNG- Material code";
+const PREVIOUS_SHARE_ZBOM = "\\\\172.26.43.3\\ZKNG- Material code\\ZBOM";
 const MATERIAL_PATTERN = /fabric\s*material\s*code/i;
 const SUMMARY_PATTERN = /(?:z|knitting)\s*summary|circular\s*knitting/i;
 const FINISH_TYPE_PATTERN = /(?:finish|finsih)\s*type\s*short\s*name/i;
@@ -398,14 +399,16 @@ async function getConfig() {
     autoUpdate: true,
     sources: {},
   });
-  // The LAN data moved one folder deeper on 2026-11-15
-  // (...\\ZKNG- Material code\\ZBOM). A computer that still has the old
-  // location saved switches over automatically and the new location is
-  // stored, so nobody has to retype it in Settings.
+  // The LAN data moved on 2026-11-26 to the squaregroup.com share
+  // (...\\sflfu-erplap-1\\ZBOM). A computer that still has either old
+  // location saved (the 2026-11-15 ZBOM folder or the older share root)
+  // switches over automatically and the new location is stored, so
+  // nobody has to retype it in Settings.
   const savedShare = String(config.sharePath || "").trim().replace(/\\+$/, "");
   if (!savedShare) {
     config.sharePath = DEFAULT_SHARE;
-  } else if (savedShare.toLowerCase() === PREVIOUS_SHARE.toLowerCase()) {
+  } else if (savedShare.toLowerCase() === PREVIOUS_SHARE.toLowerCase()
+    || savedShare.toLowerCase() === PREVIOUS_SHARE_ZBOM.toLowerCase()) {
     config.sharePath = DEFAULT_SHARE;
     writeJsonAtomic(userFile("config.json"), config).catch(() => {});
   }
