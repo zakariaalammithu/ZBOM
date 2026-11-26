@@ -1847,72 +1847,156 @@ function prodExportExcel() {
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const rows = prodRows();
   if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
-  const values = rows.map((row) => ({ row, p: prodRowProduction(row) }));
-  const total = values.reduce((s, v) => s + (v.p || 0), 0);
-  const isLycra = prodHasLycra();
-  const lycraValues = isLycra ? values.map(({ row }) => prodLycraPerShift(row)) : [];
-  const lycraTotal = lycraValues.reduce((s, v) => s + (v || 0), 0);
-  const hasFilament = prodHasFilament();
-  const filamentValues = hasFilament ? values.map(({ row }) => prodFilamentPerShift(row)) : [];
-  const filamentTotal = filamentValues.reduce((s, v) => s + (v || 0), 0);
-  // Multi-yarn fabrics: one Count/Denier + Stitch Length + Production
-  // column per extra yarn, after the combined Production column.
   const yarnSpec = (PROD_MULTI_YARN[prodCalc.fabric] || {}).extra || [];
-  const yarnVals = values.map(({ row }) => prodYarnValues(row));
-  const yarnProd = values.map(({ row }, i) => yarnVals[i].map((yv) => prodYarnPerShift(row, yv)));
-  const yarnTotals = yarnSpec.map((y, j) => yarnProd.reduce((s, arr) => s + (arr[j] || 0), 0));
-  const yarnHeader = yarnSpec.flatMap((y) => [y.kind === "Denier" ? `${y.label} Denier (D)` : `${y.label} Count (Ne)`, `${y.label} Stitch Length (mm)`, `${y.label} Production (kg)`]);
-  // The export keeps the columns exactly as they were uploaded — the 7
-  // input columns plus any extra columns the user added, in the same
-  // order — then the calculated Production column(s).
-  const columns = prodColumns();
-  const prodCell = (row, c) => {
-    if (c.key === "machine") return row.machine ?? "";
-    if (c.key === "needles") { const n = prodNum(row.needles); return Number.isFinite(n) ? n : ""; }
-    if (c.key === "needlesUsed") { const n = prodNeedlesFor(row); return Number.isFinite(n) ? n : ""; }
-    return c.key ? prodNum(row[c.key]) : (row.extra && row.extra[c.label] != null ? row.extra[c.label] : "");
-  };
-  const header = [...columns.map((c) => c.label), "Production / Shift (kg)", ...yarnHeader, ...(isLycra ? ["Lycra Denier (D)", "Lycra Stitch Length (mm)", "Lycra Needles", "Lycra No of Feeder", "Lycra Production (kg)"] : []), ...(hasFilament ? ["Filament Denier (D)", "Filament Stitch Length (mm)", "Filament Needles", "Filament No of Feeder", "Filament Production (kg)"] : [])];
-  const data = values.map(({ row, p }, i) => [
-    ...columns.map((c) => prodCell(row, c)),
-    Number.isFinite(p) ? Number(p.toFixed(2)) : "",
-    ...yarnSpec.flatMap((y, j) => {
-      const yv = yarnVals[i][j];
-      const cnt = y.kind === "Denier" ? yv.denier : (Number.isFinite(yv.count) ? Number(yv.count.toFixed(2)) : "");
-      return [cnt, Number.isFinite(yv.sl) ? Number(yv.sl.toFixed(2)) : "", Number.isFinite(yarnProd[i][j]) ? Number(yarnProd[i][j].toFixed(2)) : ""];
-    }),
-    ...(isLycra ? [Number.isFinite(prodLycraDenierFor(row)) ? prodLycraDenierFor(row) : "", Number.isFinite(prodLycraSlFor(row)) ? Number(prodLycraSlFor(row).toFixed(2)) : "", Number.isFinite(prodLycraNeedlesFor(row)) ? prodLycraNeedlesFor(row) : "", Number.isFinite(prodLycraFeedersFor(row)) ? prodLycraFeedersFor(row) : "", Number.isFinite(lycraValues[i]) ? Number(lycraValues[i].toFixed(2)) : ""] : []),
-    ...(hasFilament ? [Number.isFinite(prodFilamentDenierFor(row)) ? prodFilamentDenierFor(row) : "", Number.isFinite(prodFilamentSlFor(row)) ? Number(prodFilamentSlFor(row).toFixed(2)) : "", Number.isFinite(prodFilamentNeedlesFor(row)) ? prodFilamentNeedlesFor(row) : "", Number.isFinite(prodFilamentFeedersFor(row)) ? prodFilamentFeedersFor(row) : "", Number.isFinite(filamentValues[i]) ? Number(filamentValues[i].toFixed(2)) : ""] : []),
-  ]);
-  const totalRow = columns.map((c, i) => i === 0 ? "Total" : "");
-  totalRow.push(Number(total.toFixed(2)), ...yarnSpec.flatMap((y, j) => ["", "", Number(yarnTotals[j].toFixed(2))]), ...(isLycra ? ["", "", "", "", Number(lycraTotal.toFixed(2))] : []), ...(hasFilament ? ["", "", "", "", Number(filamentTotal.toFixed(2))] : []));
-  data.push(totalRow);
+  const num2 = (v) => Number.isFinite(v) ? Number(v.toFixed(2)) : NaN;
+  const yarnLabel = (yv) => yv.kind === "Denier" ? `${yv.denier}D` : `${yv.count}/1`;
+  const mainLabel = (row) => { const c = prodNum(row.count); return Number.isFinite(c) ? `${c}/1` : "Main Yarn"; };
+
+  // Per machine: the materials that really have production, each rounded
+  // to 2 decimals, the machine total as the sum of those rounded values,
+  // and each material's share of that total.
+  const machines = rows.map((row) => {
+    const main = prodProductionPerShift(row);
+    const materials = [];
+    if (Number.isFinite(main) && main > 0) materials.push({ label: mainLabel(row), type: "Main Yarn", production: num2(main) });
+    prodYarnValues(row).forEach((yv) => {
+      const pv = prodYarnPerShift(row, yv);
+      if (Number.isFinite(pv) && pv > 0) materials.push({ label: yarnLabel(yv), type: yv.label, production: num2(pv) });
+    });
+    if (prodRowHasLycra(row)) {
+      const pv = prodLycraPerShift(row);
+      if (Number.isFinite(pv) && pv > 0) materials.push({ label: `${prodLycraDenierFor(row)}D LY`, type: "Lycra", production: num2(pv) });
+    }
+    if (prodRowHasFilament(row)) {
+      const pv = prodFilamentPerShift(row);
+      if (Number.isFinite(pv) && pv > 0) materials.push({ label: `${prodFilamentDenierFor(row)}D Filament`, type: "Filament", production: num2(pv) });
+    }
+    const total = materials.reduce((s, m) => s + m.production, 0);
+    materials.forEach((m) => { m.pct = total > 0 ? (m.production / total) * 100 : 0; });
+    return { row, main: num2(main), materials, total: Number(total.toFixed(2)) };
+  });
+  const hasLycra = machines.some((m) => m.materials.some((x) => x.type === "Lycra"));
+  const hasFilament = machines.some((m) => m.materials.some((x) => x.type === "Filament"));
+  const sumMat = (type) => machines.reduce((s, m) => s + m.materials.filter((x) => x.type === type).reduce((a, x) => a + x.production, 0), 0);
+  const sumExtra = (j) => machines.reduce((s, m) => {
+    const yv = prodYarnValues(m.row)[j];
+    if (!yv) return s;
+    const pv = prodYarnPerShift(m.row, yv);
+    return s + (Number.isFinite(pv) && pv > 0 ? num2(pv) : 0);
+  }, 0);
+  const mainTotal = Number(machines.reduce((s, m) => s + (Number.isFinite(m.main) ? m.main : 0), 0).toFixed(2));
+  const extraTotals = yarnSpec.map((y, j) => Number(sumExtra(j).toFixed(2)));
+  const yarnTotal = Number((mainTotal + extraTotals.reduce((s, v) => s + v, 0)).toFixed(2));
+  const lycraTotal = hasLycra ? Number(sumMat("Lycra").toFixed(2)) : 0;
+  const filamentTotal = hasFilament ? Number(sumMat("Filament").toFixed(2)) : 0;
+  const grandTotal = Number((yarnTotal + lycraTotal + filamentTotal).toFixed(2));
+  const share = (v) => grandTotal > 0 ? (v / grandTotal) * 100 : 0;
+
   const wb = window.XLSX.utils.book_new();
-  const ws = window.XLSX.utils.aoa_to_sheet([header, ...data]);
-  const prodColWidths = { machine: 12, count: 16, stitchLength: 18, dia: 12, gauge: 10, needles: 22, needlesUsed: 14, feeders: 14, rpm: 10 };
-  ws["!cols"] = [...columns.map((c) => ({ wch: c.key ? (prodColWidths[c.key] || 14) : 16 })), { wch: 22 }, ...yarnSpec.flatMap(() => [{ wch: 16 }, { wch: 18 }, { wch: 20 }]), ...(isLycra ? [{ wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }] : []), ...(hasFilament ? [{ wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }] : [])];
-  window.XLSX.utils.book_append_sheet(wb, ws, "Machines");
-  const prodData = [
-    ["Fabric", prodCalc.fabric],
+
+  // ---- Sheet 1: Machine Details ----
+  const detailsHeader = ["M/C No", "Yarn Count (Ne)", "Stitch Length (mm)", "Dia (inch)", "Gauge", "Feeders", "RPM", "Needles Used", "Main Yarn Production (kg)"];
+  yarnSpec.forEach((y) => detailsHeader.push(`${y.label} Production (kg)`));
+  if (hasLycra) detailsHeader.push("Lycra Denier (D)", "Lycra Production (kg)");
+  if (hasFilament) detailsHeader.push("Filament Denier (D)", "Filament Production (kg)");
+  const detailsData = machines.map((m) => {
+    const r = m.row;
+    const vals = [r.machine ?? "", prodNum(r.count), prodNum(r.stitchLength), prodNum(r.dia), prodNum(r.gauge), prodNum(r.feeders), prodNum(r.rpm), prodNeedlesFor(r), Number.isFinite(m.main) && m.main > 0 ? m.main : ""];
+    yarnSpec.forEach((y, j) => {
+      const yv = prodYarnValues(r)[j];
+      const pv = yv ? prodYarnPerShift(r, yv) : NaN;
+      vals.push(Number.isFinite(pv) && pv > 0 ? num2(pv) : "");
+    });
+    if (hasLycra) vals.push(prodRowHasLycra(r) ? prodLycraDenierFor(r) : "", (() => { const pv = prodLycraPerShift(r); return prodRowHasLycra(r) && Number.isFinite(pv) && pv > 0 ? num2(pv) : ""; })());
+    if (hasFilament) vals.push(prodRowHasFilament(r) ? prodFilamentDenierFor(r) : "", (() => { const pv = prodFilamentPerShift(r); return prodRowHasFilament(r) && Number.isFinite(pv) && pv > 0 ? num2(pv) : ""; })());
+    return vals;
+  });
+  const detailsAoA = [
+    ["ZBOM | MACHINE DETAILS"],
+    ["Production input and output by machine"],
+    [],
+    detailsHeader,
+    ...detailsData,
+  ];
+  const detailsWs = window.XLSX.utils.aoa_to_sheet(detailsAoA);
+  detailsWs["!cols"] = [{ wch: 14 }, { wch: 15 }, { wch: 18 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 24 }, ...yarnSpec.map(() => ({ wch: 22 })), ...(hasLycra ? [{ wch: 17 }, { wch: 22 }] : []), ...(hasFilament ? [{ wch: 17 }, { wch: 22 }] : [])];
+  detailsWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: detailsHeader.length - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: detailsHeader.length - 1 } }];
+  const detailsLastRow = 4 + detailsData.length;
+  detailsWs["!autofilter"] = { ref: `A4:${String.fromCharCode(64 + detailsHeader.length)}${detailsLastRow}` };
+  window.XLSX.utils.book_append_sheet(wb, detailsWs, "Machine Details");
+
+  // ---- Sheet 2: Material-wise Yarn % ----
+  const matAoA = [
+    ["ZBOM | MATERIAL-WISE YARN %"],
+    ["Each machine's material percentages are listed vertically for easy copy and comparison"],
+    [],
+    ["M/C No", "Material / Yarn Count", "Material Type", "Production (kg)", "Material % of M/C Total"],
+  ];
+  machines.forEach((m) => {
+    m.materials.forEach((x) => matAoA.push([m.row.machine ?? "", x.label, x.type, x.production, x.pct]));
+    if (m.materials.length) matAoA.push([m.row.machine ?? "", "M/C TOTAL", "", m.total, 100]);
+  });
+  const matLastDataRow = matAoA.length;
+  matAoA.push([]);
+  const noteRow = matAoA.length + 1;
+  matAoA.push(["Note: Only materials with actual production data in the uploaded result are included. Add/enter Filament or other yarn production data in the source before a percentage can be calculated for those materials."]);
+  const matWs = window.XLSX.utils.aoa_to_sheet(matAoA);
+  matWs["!cols"] = [{ wch: 14 }, { wch: 25 }, { wch: 18 }, { wch: 20 }, { wch: 25 }];
+  matWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, { s: { r: noteRow - 1, c: 0 }, e: { r: noteRow - 1, c: 4 } }];
+  matWs["!autofilter"] = { ref: `A4:E${matLastDataRow}` };
+  window.XLSX.utils.book_append_sheet(wb, matWs, "Material-wise Yarn %");
+
+  // ---- Sheet 3: Production Summary ----
+  const sumAoA = [
+    ["ZBOM | PRODUCTION SUMMARY"],
+    [`${prodCalc.fabric} \u2022 Production report`],
+    [],
+    ["Production Overview"],
+    ["Fabric Type", prodCalc.fabric],
     ["Shift Hours", prodCalc.shiftHours],
     ["Efficiency %", prodCalc.efficiency],
-    ["Production factor", prodFactor()],
-    [],
-    ["M/C No", "Production / Shift (kg)"],
-    ...values.map(({ row, p }) => [row.machine ?? "", Number.isFinite(p) ? Number(p.toFixed(2)) : ""]),
-    ["Total", Number(total.toFixed(2))],
+    ["Production Factor", prodFactor()],
+    ["Total Machines", rows.length],
+    ["Main Yarn Production (kg)", mainTotal],
   ];
-  yarnSpec.forEach((y, j) => prodData.push([`${y.label} production`, Number(yarnTotals[j].toFixed(2))]));
-  if (isLycra) prodData.push(["Lycra production", Number(lycraTotal.toFixed(2))]);
-  if (hasFilament) prodData.push(["Filament production", Number(filamentTotal.toFixed(2))]);
-  const ws2 = window.XLSX.utils.aoa_to_sheet(prodData);
-  ws2["!cols"] = [{ wch: 18 }, { wch: 24 }];
-  window.XLSX.utils.book_append_sheet(wb, ws2, "Production");
+  yarnSpec.forEach((y, j) => sumAoA.push([`${y.label} Production (kg)`, extraTotals[j]]));
+  if (yarnSpec.length) sumAoA.push(["Total Yarn Production (kg)", yarnTotal]);
+  if (hasLycra) sumAoA.push(["Lycra Production (kg)", lycraTotal]);
+  if (hasFilament) sumAoA.push(["Filament Production (kg)", filamentTotal]);
+  sumAoA.push(["Total Material Output (kg)", grandTotal]);
+  if (grandTotal > 0) {
+    sumAoA.push(["Main Yarn Share %", share(mainTotal)]);
+    // Every material that feeds the total gets a share row, so the shares
+    // always add up to 100% — including the extra yarns of a multi-yarn
+    // fabric (a missing share row would leave the total unexplained).
+    yarnSpec.forEach((y, j) => sumAoA.push([`${y.label} Share %`, share(extraTotals[j])]));
+    if (hasLycra) sumAoA.push(["Lycra Share %", share(lycraTotal)]);
+    if (hasFilament) sumAoA.push(["Filament Share %", share(filamentTotal)]);
+  }
+  const sumWs = window.XLSX.utils.aoa_to_sheet(sumAoA);
+  sumWs["!cols"] = [{ wch: 35 }, { wch: 26 }];
+  sumWs["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
+  window.XLSX.utils.book_append_sheet(wb, sumWs, "Production Summary");
+
   const buf = window.XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const safe = String(prodCalc.fabric).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "Fabric";
   const date = new Date().toISOString().slice(0, 10);
-  prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), `ZBOM-Production-${safe}-${date}.xlsx`);
+  prodDownloadReportBlob(new Blob([buf], { type: prodXlsxMime() }), `ZBOM-Production-${safe}-${date}.xlsx`);
   showNotice(`Downloaded ${rows.length} machine${rows.length === 1 ? "" : "s"} for ${prodCalc.fabric} as Excel.`, "success");
+}
+
+async function prodDownloadReportBlob(blob, filename) {
+  const styled = window.ZBOM_XLSX_STYLE && window.ZBOM_XLSX_STYLE.styleProductionReportBlob
+    ? await window.ZBOM_XLSX_STYLE.styleProductionReportBlob(blob)
+    : blob;
+  const url = URL.createObjectURL(styled);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function prodFindColumn(headers, col) {
   const hs = headers.map((h) => String(h ?? "").trim().toLowerCase());
