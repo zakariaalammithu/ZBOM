@@ -2109,6 +2109,10 @@ async function prodHandleUpload(file) {
       : `<p class="prod-import-ok">All rows were valid.</p>`;
     setReport(ok + bad);
     showNotice(`Imported ${rows.length} machines into ${prodCalc.fabric}${problems.length ? ` — ${problems.length} rows skipped, see the Input Name panel.` : "."}`, problems.length ? "warning" : "success");
+    // The uploaded file can now be downloaded again from the table header.
+    // One button only — it lives in the HTML, so a second upload cannot
+    // create a duplicate.
+    $("#prodUploadedDownloadBtn")?.classList.remove("hidden");
   } catch (e) {
     setReport(`<p class="prod-import-error">Could not read <b>${prodEsc(file.name)}</b> — the file may be damaged or not an Excel file.</p>`);
     showNotice("Import failed — the file could not be read.", "warning");
@@ -4717,6 +4721,7 @@ $("#prodRatioFace")?.addEventListener("input", debounce(() => { const v = prodNu
 $("#prodRatioBack")?.addEventListener("input", debounce(() => { const v = prodNum($("#prodRatioBack").value); if (Number.isFinite(v) && v > 0) { if (!prodCalc.ratios) prodCalc.ratios = {}; if (!prodCalc.ratios["Rib (Custom Ratio)"]) prodCalc.ratios["Rib (Custom Ratio)"] = { face: 2, back: 1 }; prodCalc.ratios["Rib (Custom Ratio)"].back = v; saveProdCalc(); } }, 250));
 $("#prodAddMachine")?.addEventListener("click", () => { const rows = prodRows(); rows.push({ ...PROD_SAMPLE_ROW, machine: String(rows.length + 1) }); saveProdCalc(); renderProdTable(); });
 $("#prodQuickDownloadBtn")?.addEventListener("click", prodExportExcel);
+$("#prodUploadedDownloadBtn")?.addEventListener("click", prodExportExcel);
 $("#prodQuickUploadBtn")?.addEventListener("click", () => $("#prodQuickUploadInput")?.click());
 $("#prodQuickExampleBtn")?.addEventListener("click", prodDownloadTemplate);
 $("#prodQuickUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
