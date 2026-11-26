@@ -3,6 +3,13 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("erp", {
   getState: () => ipcRenderer.invoke("erp:get-state"),
   getAccessState: () => ipcRenderer.invoke("erp:get-access"),
+  getTrialStatus: () => ipcRenderer.invoke("erp:get-trial-status"),
+  resetTrial: () => ipcRenderer.invoke("erp:reset-trial"),
+  extendTrial: (days) => ipcRenderer.invoke("erp:extend-trial", days),
+  onDownloadComplete: (cb) => ipcRenderer.on("zbom:download-complete", (_e, data) => cb(data)),
+  onDownloadProgress: (cb) => ipcRenderer.on("zbom:download-progress", (_e, data) => cb(data)),
+  onDownloadFailed: (cb) => ipcRenderer.on("zbom:download-failed", (_e, data) => cb(data)),
+  onDownloadBlockedTrial: (cb) => ipcRenderer.on("zbom:download-blocked-trial", (_e, data) => cb(data)),
   getModuleAccess: () => ipcRenderer.invoke("erp:get-module-access"),
   getUserActivity: (employeeId) => ipcRenderer.invoke("erp:get-user-activity", { employeeId }),
   setModuleAccess: (payload) => ipcRenderer.invoke("erp:set-module-access", payload),

@@ -11,6 +11,8 @@ const state = {
   userActivitySelected: "",
   viewStartedAt: Date.now(),
   authenticated: false,
+  trial: null,
+  trialPopupShown: false,
   profileImageDataUrl: "",
   profileImagesByUser: {},
   codeRequirementPreview: { rows: [], file: "", sheetName: "" },
@@ -96,12 +98,134 @@ state.columnWidths.finishType ||= {};
 const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 if (previewMode) $("#previewBadge")?.classList.remove("hidden");
 
-function showNotice(message, type = "info") {
+function showNotice(message, type = "info", action) {
   const element = $("#notice");
   element.textContent = message;
   element.className = `notice ${type}`;
   window.clearTimeout(showNotice.timer);
-  showNotice.timer = window.setTimeout(() => element.classList.add("hidden"), 7000);
+  // A notice with an action (for example "Open File" after a download)
+  // stays longer and gets a button the user can click.
+  const hideAfter = action ? 20000 : 7000;
+  if (action && action.label) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "notice-action";
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => {
+      element.classList.add("hidden");
+      window.clearTimeout(showNotice.timer);
+      if (typeof action.onClick === "function") action.onClick();
+    });
+    element.appendChild(btn);
+  }
+  showNotice.timer = window.setTimeout(() => element.classList.add("hidden"), hideAfter);
+}
+
+// ---- 7-Day Free Trial (guests only) ----
+// A computer with no ZBOM account gets 7 days of free use from its first
+// launch. Signed-in users are never trial-gated. After the trial expires,
+// a guest cannot do any file operation until they create a free account
+// and sign in.
+async function refreshTrialStatus(showExpiredPopup = false) {
+  try {
+    const trial = await window.erp.getTrialStatus();
+    if (!trial) return null;
+    state.trial = trial;
+    renderTrialStatus();
+    if (showExpiredPopup && !state.authenticated && trial.expired && !state.trialPopupShown) {
+      state.trialPopupShown = true;
+      showTrialExpiredPopup();
+    }
+    return trial;
+  } catch {
+    return null;
+  }
+}
+
+function trialAllowsFileOps() {
+  // Signed-in users are never gated; guests are allowed while the trial runs.
+  if (state.authenticated) return true;
+  if (!state.trial) return true; // trial status not loaded yet — do not block
+  return !state.trial.expired;
+}
+
+function renderTrialStatus() {
+  const el = $("#trialStatus");
+  if (!el || !state.trial) return;
+  if (state.authenticated) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  if (state.trial.expired) {
+    el.textContent = "Free Trial expired — create a free account to continue";
+  } else if (state.trial.daysLeft <= 1) {
+    el.textContent = "Free Trial — last day";
+  } else {
+    el.textContent = `Free Trial — ${state.trial.daysLeft} days left`;
+  }
+  renderTrialManagement();
+}
+
+// Main Admin panel: trial start / expiry / status + Reset / Extend.
+function renderTrialManagement() {
+  const el = $("#trialManagementStatus");
+  if (!el || !state.trial) return;
+  const t = state.trial;
+  const status = t.expired ? "Expired" : `Active — ${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"} left`;
+  el.innerHTML = `<p><b>Status:</b> ${status}</p>`
+    + `<p><b>Trial started:</b> ${formatDate(t.startedAt)}</p>`
+    + `<p><b>Expires:</b> ${formatDate(t.expiresAt)}</p>`
+    + `<p><b>Trial length:</b> ${t.trialDays} days</p>`;
+}
+
+function showTrialExpiredPopup() {
+  $("#trialExpiredOverlay")?.classList.remove("hidden");
+}
+
+function hideTrialExpiredPopup() {
+  $("#trialExpiredOverlay")?.classList.add("hidden");
+}
+
+// Call before any client-side file operation (Production/Yarn upload or
+// download). Returns true when the operation may proceed.
+function ensureTrialForFileOp() {
+  if (trialAllowsFileOps()) return true;
+  showTrialExpiredPopup();
+  return false;
+}
+
+// ---- Download progress / completion (main process reports via will-download) ----
+// After a file downloads, the user gets a success message with an "Open File"
+// button on the same page; a failed download shows an error and the
+// Download button stays available for a retry.
+function wireDownloadListeners() {
+  if (!window.erp || typeof window.erp.onDownloadComplete !== "function") return;
+  if (wireDownloadListeners.done) return;
+  wireDownloadListeners.done = true;
+  window.erp.onDownloadProgress((data) => {
+    if (!data || !data.filename) return;
+    const pct = data.percent != null ? ` — ${data.percent}%` : "";
+    showNotice(`Downloading ${data.filename}${pct}…`, "info");
+  });
+  window.erp.onDownloadComplete((data) => {
+    if (!data || !data.filename) return;
+    // Use the existing download bar (same as material export and the
+    // ZKNG / LSMW / Routing ready downloads): filename + Open File.
+    if (data.path) state.lastDownloadedFile = data.path;
+    const nameEl = $("#downloadedFileName");
+    if (nameEl) nameEl.textContent = data.filename;
+    $("#downloadComplete")?.classList.remove("hidden");
+    showNotice(`Downloaded ${data.filename} to your Downloads folder.`, "success");
+  });
+  window.erp.onDownloadFailed((data) => {
+    if (!data || !data.filename) return;
+    showNotice(`Download failed for ${data.filename} (${data.state || "interrupted"}). Please try downloading again.`, "warning");
+  });
+  window.erp.onDownloadBlockedTrial(() => {
+    showTrialExpiredPopup();
+  });
 }
 
 function formatDate(value) {
@@ -1799,6 +1923,7 @@ async function prodDownloadBlob(blob, filename) {
 }
 function prodXlsxMime() { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; }
 function prodDownloadTemplate() {
+  if (!ensureTrialForFileOp()) return;
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const wb = window.XLSX.utils.book_new();
   // The template follows the user's file layout, yarns first:
@@ -1844,6 +1969,7 @@ function prodDownloadTemplate() {
   prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
 }
 function prodExportExcel() {
+  if (!ensureTrialForFileOp()) return;
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const rows = prodRows();
   if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
@@ -2176,6 +2302,7 @@ function prodProblemsHtml(problems) {
   return `<ul class="prod-import-problems">` + shown.map((p) => `<li>Row ${p.row}: ${prodEsc(p.message)}</li>`).join("") + `</ul>` + (more > 0 ? `<p class="prod-import-warn">…and ${more} more problem rows.</p>` : "");
 }
 async function prodHandleUpload(file) {
+  if (!ensureTrialForFileOp()) return;
   const report = $("#prodImportReport");
   const quickReport = $("#prodQuickReport");
   const setReport = (html) => { if (report) report.innerHTML = html; if (quickReport) quickReport.innerHTML = html; };
@@ -2216,6 +2343,10 @@ async function prodHandleUpload(file) {
       : `<p class="prod-import-ok">All rows were valid.</p>`;
     setReport(ok + bad);
     showNotice(`Imported ${rows.length} machines into ${prodCalc.fabric}${problems.length ? ` — ${problems.length} rows skipped, see the Input Name panel.` : "."}`, problems.length ? "warning" : "success");
+    // After a successful upload the Download File button appears in the
+    // table header (same as the website), so the processed file can be
+    // downloaded straight away.
+    $("#prodUploadedDownloadBtn")?.classList.remove("hidden");
   } catch (e) {
     setReport(`<p class="prod-import-error">Could not read <b>${prodEsc(file.name)}</b> — the file may be damaged or not an Excel file.</p>`);
     showNotice("Import failed — the file could not be read.", "warning");
@@ -2669,6 +2800,7 @@ async function fleeceDownloadBlob(blob, filename) {
 }
 function fleeceXlsxMime() { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; }
 function fleeceDownloadExcel() {
+  if (!ensureTrialForFileOp()) return;
   const note = document.getElementById("fleeceCopyNote");
   if (!window.XLSX) {
     if (note) note.textContent = "Excel support is not available in this version.";
@@ -2809,6 +2941,7 @@ function fleeceUploadProblemsHtml(problems) {
   return `<ul class="fleece-upload-problems">` + shown.map((p) => `<li>Row ${p.row}: ${fleeceEsc(p.message)}</li>`).join("") + `</ul>` + (more > 0 ? `<p class="fleece-upload-warn">…and ${more} more problem rows.</p>` : "");
 }
 async function fleeceHandleUpload(file) {
+  if (!ensureTrialForFileOp()) return;
   const report = document.getElementById("fleeceExcelReport");
   const setReport = (html) => { if (report) report.innerHTML = html; };
   if (!file) return;
@@ -4761,6 +4894,9 @@ async function refreshAccess() {
   renderAccess();
   if (state.view === "department") renderDepartmentStatus(state.department);
   renderOverviewStatus();
+  // Keep the free-trial status current after sign-in / sign-out, so the
+  // trial line and the file-operation gate follow the signed-in state.
+  refreshTrialStatus().catch(() => {});
 }
 
 async function checkSoftwareUpdate(silent = true) {
@@ -4948,6 +5084,9 @@ async function initialize() {
   setConnection(false, "Checking shared folder…");
   updateData(false, true).catch(() => {});
   checkSoftwareUpdate(true).catch(() => {});
+  // Free-trial status for this computer (guests only) + download events.
+  wireDownloadListeners();
+  refreshTrialStatus(true).catch(() => {});
 
   window.setInterval(() => {
     if ($("#autoUpdate")?.checked) {
@@ -5374,6 +5513,7 @@ $("#prodInputClose")?.addEventListener("click", () => { $("#prodInputPanel")?.cl
 $("#prodUploadBtn")?.addEventListener("click", () => $("#prodUploadInput")?.click());
 $("#prodUploadInput")?.addEventListener("change", (event) => { const file = event.target.files && event.target.files[0]; event.target.value = ""; if (file) prodHandleUpload(file); });
 $("#prodDownloadExcelBtn")?.addEventListener("click", prodExportExcel);
+$("#prodUploadedDownloadBtn")?.addEventListener("click", prodExportExcel);
 // Yarn Calculation listeners (inputs are the yellow cells, as in the sheet)
 $("#fleeceTypeSelect")?.addEventListener("change", (event) => {
   fleeceCalc.type = event.target.value;
@@ -5809,6 +5949,44 @@ $("#confirmAdminLogin")?.addEventListener("click", confirmAdminLogin);
 $("#openRegistration")?.addEventListener("click", openRegistration);
 $("#cancelRegistration")?.addEventListener("click", closeRegistration);
 $("#submitRegistration")?.addEventListener("click", submitRegistration);
+$("#trialClose")?.addEventListener("click", hideTrialExpiredPopup);
+$("#trialCreateAccount")?.addEventListener("click", () => { hideTrialExpiredPopup(); openRegistration(); });
+$("#trialResetBtn")?.addEventListener("click", async () => {
+  const btn = $("#trialResetBtn");
+  btn.disabled = true;
+  try {
+    const result = await window.erp.resetTrial();
+    if (result && result.ok) {
+      state.trial = result.trial;
+      renderTrialStatus();
+      showNotice("Free trial reset — a new 7 days starts now on this computer.", "success");
+    } else {
+      showNotice(result?.message || "Trial could not be reset.", "warning");
+    }
+  } catch (e) {
+    showNotice(`Trial could not be reset: ${e.message}`, "warning");
+  } finally {
+    btn.disabled = false;
+  }
+});
+$("#trialExtendBtn")?.addEventListener("click", async () => {
+  const btn = $("#trialExtendBtn");
+  btn.disabled = true;
+  try {
+    const result = await window.erp.extendTrial(7);
+    if (result && result.ok) {
+      state.trial = result.trial;
+      renderTrialStatus();
+      showNotice("Free trial extended by 7 days.", "success");
+    } else {
+      showNotice(result?.message || "Trial could not be extended.", "warning");
+    }
+  } catch (e) {
+    showNotice(`Trial could not be extended: ${e.message}`, "warning");
+  } finally {
+    btn.disabled = false;
+  }
+});
 $("#cancelAdminLogin")?.addEventListener("click", () => $("#adminLoginOverlay").classList.add("hidden"));
 $("#cancelAccessRestricted")?.addEventListener("click", () => $("#accessRestrictedOverlay").classList.add("hidden"));
 $("#goToLoginFromRestricted")?.addEventListener("click", () => {
@@ -5910,6 +6088,9 @@ async function performLogoutAndSwitchUser() {
   changeView("dashboard");
   $("#adminLoginOverlay")?.classList.add("hidden");
   showNotice("Signed out successfully. You are now using Guest mode.", "success");
+  // Refresh the trial status for the guest who is now using the app, so
+  // the trial line and the file-operation gate use the current record.
+  refreshTrialStatus().catch(() => {});
   if (window.erp && typeof window.erp.logout === "function") {
     window.erp.logout().catch((err) => console.warn("Background logout error:", err));
   }

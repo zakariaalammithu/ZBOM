@@ -47,10 +47,12 @@
           <button class="submodule-nav" data-view="administration" data-admin-section="accountManagementPanel"><i>└</i> Account Management</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="moduleAccessPanel"><i>└</i> Module Access Control</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="userActivityPanel"><i>└</i> User Activity Summary</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="trialManagementPanel"><i>└</i> Free Trial Management</button>
         </div>
         <button data-view="settings"><i>⚙</i> Settings</button>
       </nav>
       <div class="side-status hidden" id="sideStatus"><i></i><span><b>Checking LAN…</b><small id="sideUpdated">No local update</small></span></div>
+      <div class="trial-status hidden" id="trialStatus"></div>
       <div class="profile"><button class="profile-photo" id="changeProfilePhoto" title="Change your profile photo"><span id="profileInitials">GU</span><img class="hidden" id="profileImage" alt="Profile"></button><div><b id="profileName">Guest User</b><small id="profileRole">Guest User</small><div class="profile-links"><button class="change-photo-button" id="changeProfilePhotoButton">Change Photo</button><button class="logout-button" id="logoutUser">Sign In / Create Account</button></div></div></div>
     </aside>
 
@@ -325,7 +327,7 @@
         </div>
         <div id="prodCalcBody">
           <div class="table-card">
-            <div class="table-meta"><b id="prodMatches">1 machine</b><span>Production is calculated live as you type</span></div>
+            <div class="table-meta"><b id="prodMatches">1 machine</b><span>Production is calculated live as you type</span><button class="primary hidden" id="prodUploadedDownloadBtn" type="button" title="Download the uploaded Production file as an Excel file">⬇ Download File</button></div>
             <div class="table-scroll"><table id="prodTable">
               <thead><tr id="prodTableHeadRow"><th>M/C No</th><th>Yarn Count (Ne)</th><th>Stitch Length (mm)</th><th>Dia (inch)</th><th>Gauge</th><th>No of Feeder</th><th>RPM</th><th>Production / Shift (kg)</th><th></th></tr></thead>
               <tbody id="prodTableBody"></tbody>
@@ -550,6 +552,17 @@
               <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>Date &amp; Time</th><th>Action</th><th>Module</th><th>File</th><th>Details</th><th>Status</th></tr></thead><tbody id="userActivityTable"></tbody></table></div>
             </div>
           </div>
+          <div class="panel main-admin-only" id="trialManagementPanel">
+            <div class="panel-title"><div><h3>Free Trial Management</h3><p>Guests on this computer get 7 days of free use from the first launch. After the trial expires, a guest cannot do any file operation until they create a free account and sign in. Signed-in users are never limited by the trial.</p></div><span class="role-chip">MAIN ADMIN ONLY</span></div>
+            <div class="admin-form">
+              <div id="trialManagementStatus"><p>Loading trial status…</p></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                <button type="button" class="secondary" id="trialResetBtn">Reset Trial (new 7 days)</button>
+                <button type="button" class="secondary" id="trialExtendBtn">Extend by 7 Days</button>
+              </div>
+              <p class="module-access-note">The trial is stored on this computer only. Resetting or extending it here affects this computer's guest trial.</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -627,6 +640,14 @@
       <label class="registration-request"><input type="checkbox" id="registerRequestSubAdmin"><span>Request Sub-Admin access for this department</span></label>
       <small class="login-error hidden" id="registrationError"></small>
       <div><button class="secondary" id="cancelRegistration">Back to Sign In</button><button class="primary" id="submitRegistration">Create Account</button></div>
+    </div>
+  </div>
+  <div class="admin-login-overlay hidden" id="trialExpiredOverlay">
+    <div class="admin-login-card">
+      <img class="login-logo" src="assets/zb-logo.png" alt="ZBOM logo">
+      <b>Your 7-Day Free Trial Has Expired!</b>
+      <p>Create your FREE account to continue using ZBOM and access your files and features.</p>
+      <div><button class="secondary" id="trialClose">Close</button><button class="primary" id="trialCreateAccount">Create Free Account</button></div>
     </div>
   </div>
   <div class="excel-filter-menu hidden" id="excelFilterMenu">

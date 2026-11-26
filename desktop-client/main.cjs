@@ -140,6 +140,167 @@ async function writeJsonAtomic(file, value) {
   try { await fsp.unlink(temporary); } catch {}
 }
 
+// ---------------------------------------------------------------------------
+// 7-Day Free Trial (guests only)
+// ---------------------------------------------------------------------------
+// A computer with no ZBOM account gets 7 days of free use, counted from the
+// first launch on that computer. The trial record lives in the app's local
+// data folder AND in a second file under the user's home folder; the
+// earliest valid start date wins, so deleting one copy does not restart
+// the trial. Each record carries a checksum over (machineId + startedAt +
+// expiresAt), so editing the start date by hand is detected and treated
+// as expired. Signed-in users are never trial-gated: creating a free
+// account and signing in restores full access immediately.
+// Honest limit: this is an offline app, so a user who deletes BOTH local
+// trial files can start a fresh trial. A server-side trial would be
+// needed to make that impossible.
+const TRIAL_DAYS = 7;
+const TRIAL_CHECKSUM_SALT = "zbom-trial-v1";
+const TRIAL_MS = TRIAL_DAYS * 24 * 60 * 60 * 1000;
+
+function trialMachineId() {
+  try {
+    const nets = os.networkInterfaces();
+    const macs = [];
+    for (const list of Object.values(nets)) {
+      for (const entry of list || []) {
+        if (entry && entry.mac && entry.mac !== "00:00:00:00:00:00" && !entry.internal) macs.push(entry.mac);
+      }
+    }
+    macs.sort();
+    const raw = `${os.hostname()}|${macs[0] || "no-mac"}`;
+    return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 32);
+  } catch {
+    return "unknown-machine";
+  }
+}
+
+function trialChecksum(machineId, startedAt, expiresAt) {
+  return crypto.createHash("sha256").update(`${machineId}|${startedAt}|${expiresAt || ""}|${TRIAL_CHECKSUM_SALT}`).digest("hex");
+}
+
+function trialPrimaryFile() { return userFile("trial.json"); }
+function trialBackupFile() { return path.join(os.homedir(), ".zbom", "trial.json"); }
+
+function readTrialFile(file) {
+  // Returns { ok: true, record } for a valid record, { ok: false, exists }
+  // otherwise. A file that EXISTS but fails validation (bad checksum,
+  // bad dates) is tampering, not a first launch — it must not silently
+  // grant a fresh trial.
+  try {
+    const raw = fs.readFileSync(file, "utf8");
+    const rec = JSON.parse(raw);
+    if (!rec || typeof rec.startedAt !== "string" || typeof rec.machineId !== "string") return { ok: false, exists: true };
+    if (rec.checksum !== trialChecksum(rec.machineId, rec.startedAt, rec.expiresAt || "")) return { ok: false, exists: true };
+    const started = Date.parse(rec.startedAt);
+    if (!Number.isFinite(started) || started > Date.now()) return { ok: false, exists: true };
+    if (rec.expiresAt && (!Number.isFinite(Date.parse(rec.expiresAt)) || Date.parse(rec.expiresAt) < started)) return { ok: false, exists: true };
+    return { ok: true, exists: true, record: { startedAt: rec.startedAt, expiresAt: rec.expiresAt || "", machineId: rec.machineId } };
+  } catch (error) {
+    return { ok: false, exists: error && error.code !== "ENOENT" };
+  }
+}
+
+function writeTrialFile(file, record) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const stamped = { ...record, checksum: trialChecksum(record.machineId, record.startedAt, record.expiresAt || "") };
+    // Atomic write (temp + rename) so a crash cannot leave a half-written
+    // file that would look like tampering.
+    const tmp = `${file}.${process.pid}-${Date.now()}.new`;
+    fs.writeFileSync(tmp, JSON.stringify(stamped));
+    fs.renameSync(tmp, file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getTrialStatus() {
+  // Read both copies; the earliest valid start date wins.
+  const reads = [readTrialFile(trialPrimaryFile()), readTrialFile(trialBackupFile())];
+  const candidates = reads.filter((r) => r.ok).map((r) => r.record);
+  let record = null;
+  if (candidates.length) {
+    record = candidates.sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))[0];
+  }
+  if (!record) {
+    if (reads.some((r) => r.exists)) {
+      // A trial file exists but none is valid: the record was tampered
+      // with. Do NOT start a fresh trial — treat it as expired. The
+      // Main Admin can reset the trial from Free Trial Management.
+      return {
+        startedAt: new Date(Date.now() - TRIAL_MS - 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        daysLeft: 0,
+        expired: true,
+        trialDays: TRIAL_DAYS,
+        tampered: true,
+      };
+    }
+    // First launch on this computer: the 7-day trial starts now.
+    record = { startedAt: new Date().toISOString(), expiresAt: "", machineId: trialMachineId() };
+    writeTrialFile(trialPrimaryFile(), record);
+    writeTrialFile(trialBackupFile(), record);
+  } else {
+    // Repair a missing or stale copy so both files stay in sync.
+    writeTrialFile(trialPrimaryFile(), record);
+    writeTrialFile(trialBackupFile(), record);
+  }
+  const startedMs = Date.parse(record.startedAt);
+  const expiresMs = record.expiresAt ? Date.parse(record.expiresAt) : startedMs + TRIAL_MS;
+  const now = Date.now();
+  const msLeft = expiresMs - now;
+  const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+  return {
+    startedAt: record.startedAt,
+    expiresAt: new Date(expiresMs).toISOString(),
+    daysLeft,
+    expired: now >= expiresMs,
+    trialDays: TRIAL_DAYS,
+  };
+}
+
+// Main Admin only: start a fresh 7-day trial on this computer.
+function resetTrialRecord() {
+  const record = { startedAt: new Date().toISOString(), expiresAt: "", machineId: trialMachineId() };
+  writeTrialFile(trialPrimaryFile(), record);
+  writeTrialFile(trialBackupFile(), record);
+  return getTrialStatus();
+}
+
+// Main Admin only: add days to the current expiry (or from now if expired).
+function extendTrialRecord(days) {
+  const status = getTrialStatus();
+  const addDays = Math.max(1, Math.min(365, Number(days) || 7));
+  const base = Math.max(Date.parse(status.expiresAt), Date.now());
+  const record = {
+    startedAt: status.startedAt,
+    expiresAt: new Date(base + addDays * 24 * 60 * 60 * 1000).toISOString(),
+    machineId: trialMachineId(),
+  };
+  writeTrialFile(trialPrimaryFile(), record);
+  writeTrialFile(trialBackupFile(), record);
+  return getTrialStatus();
+}
+
+function isSignedInNow() {
+  return Boolean(currentActiveSession) || authenticatedAdminSessions.size > 0;
+}
+
+// Returns null when file operations are allowed, or a { ok:false,
+// trialExpired:true, message } result when a guest's trial has expired.
+function trialGate() {
+  if (isSignedInNow()) return null;
+  const status = getTrialStatus();
+  if (!status.expired) return null;
+  return {
+    ok: false,
+    trialExpired: true,
+    message: "Your 7-Day Free Trial Has Expired! Create your FREE account to continue using ZBOM and access your files and features.",
+  };
+}
+
 function formatDDMMYYYY(val) {
   if (!val && val !== 0) return "";
   if (val instanceof Date) {
@@ -2101,6 +2262,14 @@ function createWindow() {
   // A number is added when the same name already exists, so an earlier
   // download is never overwritten.
   mainWindow.webContents.session.on("will-download", (_event, item) => {
+    // Trial backstop: an expired guest cannot download anything. The
+    // renderer checks first and shows the trial popup; this stops a
+    // download that slips past the UI check.
+    if (!isSignedInNow() && getTrialStatus().expired) {
+      _event.preventDefault();
+      mainWindow.webContents.send("zbom:download-blocked-trial", { filename: item.getFilename() || "download" });
+      return;
+    }
     try {
       const downloadsDir = app.getPath("downloads");
       const filename = item.getFilename() || "download";
@@ -2113,6 +2282,30 @@ function createWindow() {
         candidate = path.join(downloadsDir, `${base} (${n})${ext}`);
       }
       item.setSavePath(candidate);
+      item.on("updated", (_e, state) => {
+        if (state !== "progressing") return;
+        const received = item.getReceivedBytes();
+        const total = item.getTotalBytes();
+        mainWindow.webContents.send("zbom:download-progress", {
+          filename: item.getFilename(),
+          received,
+          total,
+          percent: total > 0 ? Math.round((received / total) * 100) : null,
+        });
+      });
+      item.on("done", (_e, state) => {
+        if (state === "completed") {
+          mainWindow.webContents.send("zbom:download-complete", {
+            filename: item.getFilename(),
+            path: item.getSavePath(),
+          });
+        } else {
+          mainWindow.webContents.send("zbom:download-failed", {
+            filename: item.getFilename(),
+            state,
+          });
+        }
+      });
     } catch {}
   });
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
@@ -2188,6 +2381,18 @@ app.whenReady().then(async () => {
       profileImageDataUrl: await profileImageDataUrl(access.username),
       moduleAccess: await effectiveModuleAccessForAccess(access),
     };
+  });
+  // 7-Day Free Trial: status for this computer, and Main-Admin controls.
+  ipcMain.handle("erp:get-trial-status", () => getTrialStatus());
+  ipcMain.handle("erp:reset-trial", async (event) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can manage the free trial." };
+    return { ok: true, trial: resetTrialRecord() };
+  });
+  ipcMain.handle("erp:extend-trial", async (event, days) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can manage the free trial." };
+    return { ok: true, trial: extendTrialRecord(days) };
   });
 function rolePermissionFlags(role) {
   const perms = ROLE_PERMISSIONS[normalizeRole(role)] || new Set();
@@ -2376,6 +2581,8 @@ function summarizeUserActivity(events) {
     return result.canceled ? null : result.filePaths[0];
   });
   ipcMain.handle("erp:export", async (event, { rows, format, defaultName, tableType, diaTotals, knittingBalance }) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const access = await accessForEvent(event);
     if (!adminAuthorized(event, access)) {
       return { ok: false, message: "Create an account or sign in before downloading files." };
@@ -2495,6 +2702,8 @@ function summarizeUserActivity(events) {
     };
   });
   ipcMain.handle("erp:upload-characteristics-master", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -2519,6 +2728,8 @@ function summarizeUserActivity(events) {
     return { ok: published.ok, message: published.ok ? `Characteristics Master updated: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-characteristics-material", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2565,6 +2776,8 @@ function summarizeUserActivity(events) {
     return { ok: true, message: `Characteristics processing complete: ${generated.rowCount} SAP-ready rows generated.`, state: nextState };
   });
   ipcMain.handle("erp:download-characteristics-ready", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2636,6 +2849,8 @@ function summarizeUserActivity(events) {
     };
   });
   ipcMain.handle("erp:upload-routing-master", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -2660,6 +2875,8 @@ function summarizeUserActivity(events) {
     return { ok: published.ok, message: published.ok ? `Routing Master updated and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-routing-material", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2796,6 +3013,8 @@ function summarizeUserActivity(events) {
     };
   });
   ipcMain.handle("erp:download-routing-ready", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2977,11 +3196,15 @@ function summarizeUserActivity(events) {
     return clearMasterSection(section);
   });
   ipcMain.handle("erp:upload-master-section", async (event, section) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const permission = await requireMasterControl(event);
     if (!permission.ok) return permission;
     return uploadMasterSection(section);
   });
   ipcMain.handle("erp:upload-department-file", async (event, payload) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const authorization = await requirePermission(event, "upload");
     if (!authorization.ok) return authorization;
     const department = typeof payload === "string" ? payload : payload?.department;
@@ -2998,6 +3221,8 @@ function summarizeUserActivity(events) {
     return chooseProfileImage(access.username);
   });
   ipcMain.handle("erp:download-resource", async (event, resourceId) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const access = await accessForEvent(event);
     return downloadBundledResource(resourceId);
   });
@@ -3028,6 +3253,8 @@ function summarizeUserActivity(events) {
     };
   });
   ipcMain.handle("erp:upload-zkng-master", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -3050,6 +3277,8 @@ function summarizeUserActivity(events) {
     return { ok: published.ok, message: published.ok ? `ZKNG Master replaced and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, zkngMasterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready), materialReady: Boolean(next.materialReady) } };
   });
   ipcMain.handle("erp:import-zkng-material", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3099,6 +3328,8 @@ function summarizeUserActivity(events) {
     return { ok: true, message: `Processing completed: ${generated.rowCount} rows added to the ZKNG Material Upload Ready file.`, state: nextState };
   });
   ipcMain.handle("erp:download-zkng-ready", async (event, includeRouting = false) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3158,6 +3389,8 @@ function summarizeUserActivity(events) {
     };
   });
   ipcMain.handle("erp:upload-lsmw-bom-master", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -3180,6 +3413,8 @@ function summarizeUserActivity(events) {
     return { ok: published.ok, message: published.ok ? `LSMW BOM Master replaced and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-lsmw-bom-material", async (event) => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3339,6 +3574,8 @@ function summarizeUserActivity(events) {
     return { ok: true, message: `LSMW BOM processing complete: Generated 4 ready files (${headerRows.length} Header & ${itemRows.length} Item rows).`, state: nextState };
   });
   ipcMain.handle("erp:download-lsmw-bom-ready", async (event, fileType = "all") => {
+    const trialBlocked = trialGate();
+    if (trialBlocked) return trialBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
