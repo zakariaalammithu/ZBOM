@@ -85,6 +85,25 @@
       .replace(/&apos;/g, "'");
   }
 
+  // Insert <pageMargins> + <pageSetup> where the OOXML schema requires
+  // them: AFTER autoFilter / mergeCells / printOptions and BEFORE
+  // headerFooter / rowBreaks / ignoredErrors / drawing. Inserting them
+  // right after </sheetData> puts them BEFORE autoFilter and mergeCells,
+  // which makes Excel report "a problem with some content" and recover
+  // the file as blank — LibreOffice and openpyxl tolerate the wrong
+  // order, Excel does not.
+  function insertPageSetupXml(xml, pageSetupXml) {
+    if (/<pageSetup\b/.test(xml)) return xml;
+    var afterMarkers = ["<headerFooter", "<rowBreaks", "<colBreaks", "<ignoredErrors", "<drawing", "<legacyDrawing", "<tableParts", "<extLst", "</worksheet>"];
+    var idx = -1;
+    for (var i = 0; i < afterMarkers.length; i++) {
+      var at = xml.indexOf(afterMarkers[i]);
+      if (at !== -1 && (idx === -1 || at < idx)) idx = at;
+    }
+    if (idx === -1) return xml + pageSetupXml;
+    return xml.slice(0, idx) + pageSetupXml + xml.slice(idx);
+  }
+
   // Longest display length per column, from the <v> values in sheetData.
   function computeColumnWidths(sheetDataXml) {
     var maxLen = {};
@@ -156,9 +175,7 @@
     if (!/<pageSetUpPr\b/.test(out)) {
       out = out.replace(/<worksheet\b([^>]*)>/, "<worksheet$1>" + SHEET_PR_XML);
     }
-    if (!/<pageSetup\b/.test(out)) {
-      out = out.replace("</sheetData>", "</sheetData>" + PAGE_SETUP_XML);
-    }
+    out = insertPageSetupXml(out, PAGE_SETUP_XML);
     return out;
   }
 
@@ -458,9 +475,7 @@
     if (!/<pageSetUpPr\b/.test(out)) {
       out = out.replace(/<worksheet\b([^>]*)>/, "<worksheet$1>" + REPORT_SHEET_PR_XML);
     }
-    if (!/<pageSetup\b/.test(out)) {
-      out = out.replace("</sheetData>", "</sheetData>" + REPORT_PAGE_SETUP_XML);
-    }
+    out = insertPageSetupXml(out, REPORT_PAGE_SETUP_XML);
     return out;
   }
 
