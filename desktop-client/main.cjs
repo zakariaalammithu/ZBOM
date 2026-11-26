@@ -24,6 +24,32 @@ const DEFAULT_DEPARTMENTS = [
 ];
 const MAIN_ADMIN_USERS = new Set(["zakaria-sflfu", "zakaria", "31001625"]);
 
+// ---------------------------------------------------------------------------
+// Module Access Control (Admin — Department & File Access)
+// ---------------------------------------------------------------------------
+// The Main Admin can enable/disable each file/module separately, for a
+// specific user (by Employee ID) or for a whole department. Rules are deny
+// rules: a module is disabled for a user when it is in their user deny list
+// or in the deny list of any department they belong to. The Main Admin is
+// never denied (full control, cannot lock themselves out). Guests have no
+// Employee ID and no department, so no deny rule ever matches them.
+// Rules live on the LAN share (ZBOM-Admin/module-access.json) with a local
+// cache fallback, like access.json. Every change is written to an audit log
+// (ZBOM-Admin/module-access-audit.json).
+const MODULE_ACCESS_MODULES = [
+  { id: "materials", label: "Fabric Material Code", section: "Fabric Material Code" },
+  { id: "finishType", label: "Finish Type Short Name", section: "Fabric Material Code" },
+  { id: "codeRequirement", label: "Code Requirement File", section: "Fabric Material Code" },
+  { id: "zkngMaterialUpload", label: "ZKNG Material Upload File", section: "Fabric Material Code" },
+  { id: "lsmwBomUpload", label: "LSMW BOM Upload File", section: "Fabric Material Code" },
+  { id: "routingUploadFormat", label: "Routing Upload File", section: "Fabric Material Code" },
+  { id: "characteristicsUpload", label: "Characteristics Upload File", section: "Fabric Material Code" },
+  { id: "summary", label: "Circular Knitting Summary", section: "Circular Knitting" },
+  { id: "diaWiseSummary", label: "Dia Wise Summary", section: "Circular Knitting" },
+  { id: "productionCalculation", label: "Production Calculation", section: "Circular Knitting" },
+  { id: "fleeceCalculation", label: "Yarn Calculation", section: "Circular Knitting" },
+];
+
 let mainWindow;
 let previewWatcher;
 let currentActiveSession = null;
@@ -562,6 +588,138 @@ async function saveAccessRegistry(config, registry) {
   cachedAccessRegistry = registry;
   cachedAccessRegistryTime = Date.now();
   return { ok: true };
+}
+
+function moduleAccessFile(sharePath) {
+  return path.join(sharePath, "ZBOM-Admin", "module-access.json");
+}
+function moduleAccessAuditFile(sharePath) {
+  return path.join(sharePath, "ZBOM-Admin", "module-access-audit.json");
+}
+function departmentSlug(name) {
+  return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function emptyModuleAccess() {
+  return { version: 1, updatedAt: "", updatedBy: "", userDenies: {}, departmentDenies: {} };
+}
+function normalizeModuleAccess(raw) {
+  const rules = emptyModuleAccess();
+  if (raw && typeof raw === "object") {
+    if (raw.userDenies && typeof raw.userDenies === "object") rules.userDenies = raw.userDenies;
+    if (raw.departmentDenies && typeof raw.departmentDenies === "object") rules.departmentDenies = raw.departmentDenies;
+    if (typeof raw.updatedAt === "string") rules.updatedAt = raw.updatedAt;
+    if (typeof raw.updatedBy === "string") rules.updatedBy = raw.updatedBy;
+  }
+  return rules;
+}
+
+let cachedModuleAccess = null;
+let cachedModuleAccessTime = 0;
+async function loadModuleAccess(config) {
+  const now = Date.now();
+  if (cachedModuleAccess && now - cachedModuleAccessTime < 30000) return cachedModuleAccess;
+  const fallback = normalizeModuleAccess(await readJson(userFile("module-access-cache.json"), emptyModuleAccess()));
+  let rules = fallback;
+  cachedModuleAccess = rules;
+  cachedModuleAccessTime = now;
+  const sharedPath = config?.sharePath ? moduleAccessFile(config.sharePath) : null;
+  if (sharedPath) {
+    try {
+      const data = await Promise.race([
+        fsp.readFile(sharedPath, "utf8"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
+      ]);
+      const remote = normalizeModuleAccess(JSON.parse(data));
+      rules = remote;
+      cachedModuleAccess = remote;
+      cachedModuleAccessTime = Date.now();
+      writeJsonAtomic(userFile("module-access-cache.json"), remote).catch(() => {});
+    } catch {}
+  }
+  return rules;
+}
+async function saveModuleAccess(config, rules) {
+  rules.updatedAt = new Date().toISOString();
+  const shareReachable = await Promise.race([
+    fsp.stat(config.sharePath).then(() => true).catch(() => false),
+    new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
+  ]);
+  if (!shareReachable) {
+    throw new Error(`The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`);
+  }
+  try {
+    await writeJsonAtomic(moduleAccessFile(config.sharePath), rules);
+  } catch (error) {
+    throw new Error(`Could not save module access: the ZBOM-Admin folder could not be written on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`);
+  }
+  await writeJsonAtomic(userFile("module-access-cache.json"), rules);
+  cachedModuleAccess = rules;
+  cachedModuleAccessTime = Date.now();
+  return { ok: true };
+}
+async function loadModuleAccessAudit(config) {
+  const fallback = await readJson(userFile("module-access-audit-cache.json"), []);
+  const list = Array.isArray(fallback) ? fallback : [];
+  const sharedPath = config?.sharePath ? moduleAccessAuditFile(config.sharePath) : null;
+  if (sharedPath) {
+    try {
+      const data = await Promise.race([
+        fsp.readFile(sharedPath, "utf8"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
+      ]);
+      const remote = JSON.parse(data);
+      if (Array.isArray(remote)) return remote;
+    } catch {}
+  }
+  return list;
+}
+async function appendModuleAccessAudit(config, entry) {
+  const list = await loadModuleAccessAudit(config);
+  list.unshift(entry);
+  const trimmed = list.slice(0, 500);
+  try {
+    await writeJsonAtomic(moduleAccessAuditFile(config.sharePath), trimmed);
+  } catch {}
+  await writeJsonAtomic(userFile("module-access-audit-cache.json"), trimmed).catch(() => {});
+  return trimmed;
+}
+
+function isModuleDeniedFor(rules, username, departments, moduleId) {
+  const userKey = String(username || "").trim().toLowerCase();
+  if (userKey) {
+    const denied = rules.userDenies?.[userKey];
+    if (Array.isArray(denied) && denied.includes(moduleId)) return true;
+  }
+  for (const dept of departments || []) {
+    const slug = departmentSlug(dept);
+    if (!slug) continue;
+    const denied = rules.departmentDenies?.[slug];
+    if (Array.isArray(denied) && denied.includes(moduleId)) return true;
+  }
+  return false;
+}
+function effectiveModuleAccess(rules, username, departments, isMainAdmin) {
+  const map = {};
+  for (const mod of MODULE_ACCESS_MODULES) {
+    map[mod.id] = isMainAdmin ? true : !isModuleDeniedFor(rules, username, departments, mod.id);
+  }
+  return map;
+}
+async function effectiveModuleAccessForAccess(access) {
+  const config = await getConfig();
+  const rules = await loadModuleAccess(config);
+  const key = String(access.employeeId || access.username || "").trim().toLowerCase();
+  return effectiveModuleAccess(rules, key, access.departments, access.role === "main_admin");
+}
+async function moduleAccessDenied(event, moduleId) {
+  const access = await accessForEvent(event);
+  if (access.role === "main_admin") return null;
+  const config = await getConfig();
+  const rules = await loadModuleAccess(config);
+  const key = String(access.employeeId || access.username || "").trim().toLowerCase();
+  if (!isModuleDeniedFor(rules, key, access.departments, moduleId)) return null;
+  const label = (MODULE_ACCESS_MODULES.find((m) => m.id === moduleId) || {}).label || moduleId;
+  return { ok: false, message: `Access to ${label} is disabled by the Admin.` };
 }
 
 async function getCurrentAccess(usernameOverride = "") {
@@ -1928,6 +2086,7 @@ app.whenReady().then(async () => {
       authenticated: adminAuthorized(event, access),
       profileImageDataUrl: profileImage,
       codeRequirementPreview,
+      moduleAccess: await effectiveModuleAccessForAccess(access),
     };
   });
   ipcMain.handle("erp:get-access", async (event) => {
@@ -1939,6 +2098,68 @@ app.whenReady().then(async () => {
       departmentFiles: await loadDepartmentFiles(await getConfig(), access.departments),
       authenticated: adminAuthorized(event, access),
       profileImageDataUrl: await profileImageDataUrl(access.username),
+      moduleAccess: await effectiveModuleAccessForAccess(access),
+    };
+  });
+  ipcMain.handle("erp:get-module-access", async (event) => {
+    const access = await accessForEvent(event);
+    const config = await getConfig();
+    const rules = await loadModuleAccess(config);
+    const isMainAdmin = access.role === "main_admin";
+    const effective = await effectiveModuleAccessForAccess(access);
+    return {
+      ok: true,
+      modules: MODULE_ACCESS_MODULES,
+      effective,
+      rules: isMainAdmin ? rules : null,
+      audit: isMainAdmin ? await loadModuleAccessAudit(config) : null,
+    };
+  });
+  ipcMain.handle("erp:set-module-access", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") {
+      return { ok: false, message: "Only the Main Admin can change module access." };
+    }
+    const scope = payload?.scope === "department" ? "department" : "user";
+    const scopeId = String(payload?.scopeId || "").trim();
+    const moduleId = String(payload?.module || "").trim();
+    const deny = payload?.deny === true;
+    if (!MODULE_ACCESS_MODULES.some((m) => m.id === moduleId)) {
+      return { ok: false, message: "Unknown module." };
+    }
+    if (!scopeId) return { ok: false, message: "Choose a user or department first." };
+    const config = await getConfig();
+    const rules = await loadModuleAccess(config);
+    const key = scope === "department" ? departmentSlug(scopeId) : scopeId.toLowerCase();
+    if (scope === "department" && !key) return { ok: false, message: "Choose a department first." };
+    const store = scope === "department" ? rules.departmentDenies : rules.userDenies;
+    const list = Array.isArray(store[key]) ? [...store[key]] : [];
+    const already = list.includes(moduleId);
+    if (deny && !already) list.push(moduleId);
+    if (!deny && already) list.splice(list.indexOf(moduleId), 1);
+    if (list.length) store[key] = list; else delete store[key];
+    rules.updatedBy = access.username || "31001625";
+    try {
+      await saveModuleAccess(config, rules);
+    } catch (error) {
+      return { ok: false, message: error.message || String(error) };
+    }
+    const label = (MODULE_ACCESS_MODULES.find((m) => m.id === moduleId) || {}).label || moduleId;
+    const targetLabel = scope === "department" ? `department ${scopeId}` : `user ${scopeId}`;
+    await appendModuleAccessAudit(config, {
+      at: new Date().toISOString(),
+      by: access.username || "31001625",
+      byName: access.fullName || "",
+      scope, scopeId, module: moduleId, moduleLabel: label,
+      action: deny ? "disabled" : "enabled",
+      note: `${label} ${deny ? "disabled" : "enabled"} for ${targetLabel}.`,
+    }).catch(() => {});
+    return {
+      ok: true,
+      message: `${label} ${deny ? "disabled" : "enabled"} for ${targetLabel}.`,
+      rules,
+      effective: await effectiveModuleAccessForAccess(access),
+      audit: await loadModuleAccessAudit(config),
     };
   });
   ipcMain.handle("erp:update", (_event, force) => updateFromShare(Boolean(force)));
@@ -2006,6 +2227,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("erp:open-path", (_event, target) => shell.openPath(target));
   ipcMain.handle("erp:record-usage", async () => ({ ok: true }));
   ipcMain.handle("erp:get-characteristics-state", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     const targetDir = userFile("characteristics");
     const sessionFile = path.join(targetDir, "session.json");
@@ -2026,6 +2249,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:upload-characteristics-master", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     if (!["master_user", "admin", "main_admin"].includes(access.role)) {
       return { ok: false, message: "Access Restricted. Please log in as Master User or Admin to access this module." };
@@ -2048,6 +2273,8 @@ app.whenReady().then(async () => {
     return { ok: published.ok, message: published.ok ? `Characteristics Master updated: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-characteristics-material", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const access = authorization.access;
@@ -2092,6 +2319,8 @@ app.whenReady().then(async () => {
     return { ok: true, message: `Characteristics processing complete: ${generated.rowCount} SAP-ready rows generated.`, state: nextState };
   });
   ipcMain.handle("erp:download-characteristics-ready", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const targetDir = userFile("characteristics");
@@ -2111,6 +2340,8 @@ app.whenReady().then(async () => {
     return { ok: true, path: destination, message: `Characteristics Upload File downloaded: ${path.basename(destination)}` };
   });
   ipcMain.handle("erp:clear-characteristics-session", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const targetDir = userFile("characteristics");
@@ -2135,6 +2366,8 @@ app.whenReady().then(async () => {
     return { ok: true, message: "Previous Material Code input and Characteristics Ready file were removed.", state: nextState };
   });
   ipcMain.handle("erp:get-routing-state", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     const targetDir = userFile("routing");
     const session = await readJson(path.join(targetDir, "session.json"), {});
@@ -2157,6 +2390,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:upload-routing-master", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     if (!["master_user", "admin", "main_admin"].includes(access.role)) {
       return { ok: false, message: "Access Restricted. Please log in as Master User or Admin to access this module." };
@@ -2179,6 +2414,8 @@ app.whenReady().then(async () => {
     return { ok: published.ok, message: published.ok ? `Routing Master updated and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-routing-material", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const access = authorization.access;
@@ -2313,6 +2550,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:download-routing-ready", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const targetDir = userFile("routing");
@@ -2332,6 +2571,8 @@ app.whenReady().then(async () => {
     return { ok: true, path: destination, message: `Routing Upload File downloaded: ${path.basename(destination)}` };
   });
   ipcMain.handle("erp:clear-routing-session", async (event, kind = "routing") => {
+    const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     if (kind !== "zkng") {
@@ -2503,6 +2744,8 @@ app.whenReady().then(async () => {
     return downloadBundledResource(resourceId);
   });
   ipcMain.handle("erp:get-zkng-state", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     const targetDir = userFile("zkng");
     const sessionFile = path.join(targetDir, "session.json");
@@ -2527,6 +2770,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:upload-zkng-master", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     if (!["master_user", "admin", "main_admin"].includes(access.role)) return { ok: false, message: "Access Restricted. Please log in as Master User or Admin to access this module." };
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -2547,6 +2792,8 @@ app.whenReady().then(async () => {
     return { ok: published.ok, message: published.ok ? `ZKNG Master replaced and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, zkngMasterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready), materialReady: Boolean(next.materialReady) } };
   });
   ipcMain.handle("erp:import-zkng-material", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const access = authorization.access;
@@ -2594,6 +2841,8 @@ app.whenReady().then(async () => {
     return { ok: true, message: `Processing completed: ${generated.rowCount} rows added to the ZKNG Material Upload Ready file.`, state: nextState };
   });
   ipcMain.handle("erp:download-zkng-ready", async (event, includeRouting = false) => {
+    const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const targetDir = userFile("zkng");
@@ -2630,6 +2879,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:get-lsmw-bom-state", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     const sessionFile = userFile(path.join("lsmw-bom", "session.json"));
     const session = await readJson(sessionFile, {});
@@ -2649,6 +2900,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:upload-lsmw-bom-master", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
+    if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
     if (!["master_user", "admin", "main_admin"].includes(access.role)) return { ok: false, message: "Access Restricted. Please log in as Master User or Admin to access this module." };
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -2669,6 +2922,8 @@ app.whenReady().then(async () => {
     return { ok: published.ok, message: published.ok ? `LSMW BOM Master replaced and published to all users: ${path.basename(source)}` : published.message, state: { ...next, masterReady: true, canManageMaster: true, canImport: true, ready: Boolean(next.ready) } };
   });
   ipcMain.handle("erp:import-lsmw-bom-material", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const access = authorization.access;
@@ -2826,6 +3081,8 @@ app.whenReady().then(async () => {
     return { ok: true, message: `LSMW BOM processing complete: Generated 4 ready files (${headerRows.length} Header & ${itemRows.length} Item rows).`, state: nextState };
   });
   ipcMain.handle("erp:download-lsmw-bom-ready", async (event, fileType = "all") => {
+    const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const targetDir = userFile("lsmw-bom");
@@ -2879,6 +3136,8 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("erp:clear-lsmw-bom-session", async (event) => {
+    const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
+    if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
     if (!authorization.ok) return authorization;
     const access = await accessForEvent(event);

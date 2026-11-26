@@ -51,7 +51,28 @@ const state = {
   lsmwBom: {},
   characteristics: {},
   pendingDepartmentUpload: null,
+  moduleAccess: {},
+  moduleAccessRules: null,
+  moduleAccessAudit: [],
 };
+
+// Module Access Control (Admin): the files/modules the Main Admin can
+// enable/disable per user or per department. IDs are the renderer view IDs.
+// A module is disabled for a user when it is in their user deny list, or in
+// the deny list of any department they belong to. Main Admin is never denied.
+const MODULE_ACCESS_MODULES = [
+  { id: "materials", label: "Fabric Material Code", section: "Fabric Material Code" },
+  { id: "finishType", label: "Finish Type Short Name", section: "Fabric Material Code" },
+  { id: "codeRequirement", label: "Code Requirement File", section: "Fabric Material Code" },
+  { id: "zkngMaterialUpload", label: "ZKNG Material Upload File", section: "Fabric Material Code" },
+  { id: "lsmwBomUpload", label: "LSMW BOM Upload File", section: "Fabric Material Code" },
+  { id: "routingUploadFormat", label: "Routing Upload File", section: "Fabric Material Code" },
+  { id: "characteristicsUpload", label: "Characteristics Upload File", section: "Fabric Material Code" },
+  { id: "summary", label: "Circular Knitting Summary", section: "Circular Knitting" },
+  { id: "diaWiseSummary", label: "Dia Wise Summary", section: "Circular Knitting" },
+  { id: "productionCalculation", label: "Production Calculation", section: "Circular Knitting" },
+  { id: "fleeceCalculation", label: "Yarn Calculation", section: "Circular Knitting" },
+];
 
 const SUMMARY_CATEGORIES = [
   "34x24", "32x24", "L/RIB", "28x24", "36x24", "RIB", "28gg", "30x24",
@@ -3448,6 +3469,11 @@ function changeView(view) {
       showAccessRestricted();
       return;
     }
+    if (state.moduleAccess && state.moduleAccess[view] === false) {
+      const label = (MODULE_ACCESS_MODULES.find((m) => m.id === view) || {}).label || view;
+      showNotice(`Access to ${label} is disabled by the Admin.`, "warning");
+      return;
+    }
     const previousView = state.view;
     const seconds = Math.max(1, Math.round((Date.now() - (state.viewStartedAt || Date.now())) / 1000));
     const previousLabel = {
@@ -4180,12 +4206,169 @@ function renderAccess() {
   $("#characteristicsUploadNav")?.classList.remove("hidden");
   $("#primarySummaryNav")?.classList.toggle("hidden", !["summary", "diaWiseSummary", "productionCalculation", "fleeceCalculation"].some((id) => allowedFiles.includes(id)));
   $$('[data-view="department"]').forEach((button) => button.classList.toggle("hidden", !allowedFiles.includes("department")));
+  // Module Access Control (Admin): hide nav entries for disabled modules,
+  // and hide a whole section group when every module inside it is disabled.
+  const moduleAccess = state.moduleAccess || {};
+  $$("nav button[data-view], .submodule-nav[data-view]").forEach((button) => {
+    if (moduleAccess[button.dataset.view] === false) button.classList.add("hidden");
+  });
+  const materialViews = ["materials", "codeRequirement", "finishType", "zkngMaterialUpload", "lsmwBomUpload", "routingUploadFormat", "characteristicsUpload"];
+  const summaryViews = ["summary", "diaWiseSummary", "productionCalculation", "fleeceCalculation"];
+  if (materialViews.every((id) => moduleAccess[id] === false)) {
+    $("#materialModuleToggle")?.classList.add("hidden");
+    $("#materialSubmodules")?.classList.add("hidden");
+  }
+  if (summaryViews.every((id) => moduleAccess[id] === false)) {
+    $("#primarySummaryNav")?.classList.add("hidden");
+    $("#summarySubmodules")?.classList.add("hidden");
+  }
+  if (isMainAdmin) loadModuleAccessPanel();
   renderSubAdmins();
   renderDepartmentFiles();
   if (isFullAdmin) renderPasswordAccounts();
   if (isFullAdmin) renderAdminDashboard();
   renderProfileImage();
   renderOverviewStatus();
+}
+
+// --- Module Access Control (Admin panel) ---
+let moduleAccessPanelLoaded = false;
+async function loadModuleAccessPanel(force = false) {
+  if (!force && moduleAccessPanelLoaded) return;
+  if (typeof window.erp?.getModuleAccess !== "function") return;
+  try {
+    const result = await window.erp.getModuleAccess();
+    if (!result || !result.ok) return;
+    state.moduleAccessRules = result.rules || null;
+    state.moduleAccessAudit = Array.isArray(result.audit) ? result.audit : [];
+    if (result.effective) state.moduleAccess = result.effective;
+    moduleAccessPanelLoaded = true;
+    renderModuleAccessPanel();
+  } catch (e) {}
+}
+function moduleAccessCurrentScope() {
+  const scope = $("#moduleAccessScopeType")?.value === "user" ? "user" : "department";
+  const scopeId = scope === "user" ? ($("#moduleAccessUser")?.value || "") : ($("#moduleAccessDepartment")?.value || "");
+  return { scope, scopeId };
+}
+function renderModuleAccessPanel() {
+  const panel = $("#moduleAccessPanel");
+  if (!panel || state.access.role !== "main_admin") return;
+  const scopeType = $("#moduleAccessScopeType")?.value || "department";
+  $("#moduleAccessDepartment")?.closest("label")?.classList.toggle("hidden", scopeType !== "department");
+  $("#moduleAccessUserField")?.classList.toggle("hidden", scopeType !== "user");
+  const deptSelect = $("#moduleAccessDepartment");
+  if (deptSelect) {
+    const current = deptSelect.value;
+    deptSelect.replaceChildren(...(state.departments || []).map((d) => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d;
+      return opt;
+    }));
+    if (current && (state.departments || []).includes(current)) deptSelect.value = current;
+  }
+  const userSelect = $("#moduleAccessUser");
+  if (userSelect) {
+    const users = (state.access.subAdmins || []).filter((u) => u.employeeId);
+    const current = userSelect.value;
+    userSelect.replaceChildren(...users.map((u) => {
+      const opt = document.createElement("option");
+      opt.value = u.employeeId;
+      opt.textContent = `${u.fullName || u.employeeId} (${u.employeeId})`;
+      return opt;
+    }));
+    if (current && users.some((u) => u.employeeId === current)) userSelect.value = current;
+  }
+  renderModuleAccessList();
+  renderModuleAccessAudit();
+}
+function renderModuleAccessList() {
+  const list = $("#moduleAccessList");
+  if (!list) return;
+  const { scope, scopeId } = moduleAccessCurrentScope();
+  const rules = state.moduleAccessRules;
+  if (!rules) {
+    list.replaceChildren(Object.assign(document.createElement("p"), { textContent: "Loading access rules…" }));
+    return;
+  }
+  if (!scopeId) {
+    list.replaceChildren(Object.assign(document.createElement("p"), { textContent: `Choose a ${scope === "user" ? "user" : "department"} above to manage its module access.` }));
+    return;
+  }
+  const key = scope === "department"
+    ? scopeId.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    : scopeId.trim().toLowerCase();
+  const denied = scope === "department" ? (rules.departmentDenies?.[key] || []) : (rules.userDenies?.[key] || []);
+  const sections = {};
+  MODULE_ACCESS_MODULES.forEach((m) => {
+    (sections[m.section] ||= []).push(m);
+  });
+  list.replaceChildren();
+  Object.keys(sections).forEach((section) => {
+    const heading = document.createElement("h4");
+    heading.textContent = section;
+    list.appendChild(heading);
+    sections[section].forEach((mod) => {
+      const isDenied = denied.includes(mod.id);
+      const row = document.createElement("div");
+      row.className = "module-access-row";
+      const label = document.createElement("span");
+      label.textContent = mod.label;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = isDenied ? "secondary module-access-toggle denied" : "primary module-access-toggle";
+      btn.textContent = isDenied ? "Disabled" : "Enabled";
+      btn.addEventListener("click", () => toggleModuleAccess(mod.id, !isDenied));
+      row.appendChild(label);
+      row.appendChild(btn);
+      list.appendChild(row);
+    });
+  });
+}
+async function toggleModuleAccess(moduleId, deny) {
+  const { scope, scopeId } = moduleAccessCurrentScope();
+  if (!scopeId) {
+    showNotice("Choose a user or department first.", "warning");
+    return;
+  }
+  try {
+    const result = await window.erp.setModuleAccess({ scope, scopeId, module: moduleId, deny });
+    if (!result || !result.ok) {
+      showNotice(result?.message || "Could not change module access.", "warning");
+      return;
+    }
+    state.moduleAccessRules = result.rules || state.moduleAccessRules;
+    state.moduleAccessAudit = Array.isArray(result.audit) ? result.audit : state.moduleAccessAudit;
+    if (result.effective) state.moduleAccess = result.effective;
+    showNotice(result.message || "Module access updated.", "success");
+    renderModuleAccessPanel();
+    renderAccess();
+  } catch (error) {
+    showNotice(`Could not change module access: ${error.message}`, "warning");
+  }
+}
+function renderModuleAccessAudit() {
+  const tbody = $("#moduleAccessAuditTable");
+  const count = $("#moduleAccessAuditCount");
+  if (!tbody) return;
+  const audit = Array.isArray(state.moduleAccessAudit) ? state.moduleAccessAudit : [];
+  if (count) count.textContent = `${audit.length} CHANGE${audit.length === 1 ? "" : "S"}`;
+  tbody.replaceChildren(...audit.slice(0, 100).map((entry) => {
+    const tr = document.createElement("tr");
+    [
+      entry.at ? formatDate(entry.at) : "—",
+      entry.byName ? `${entry.byName} (${entry.by || ""})` : (entry.by || "—"),
+      entry.moduleLabel || entry.module || "—",
+      entry.scope === "department" ? `Department: ${entry.scopeId || ""}` : `User: ${entry.scopeId || ""}`,
+      entry.action === "disabled" ? "Disabled" : "Enabled",
+    ].forEach((text) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    return tr;
+  }));
 }
 
 async function refreshAccess() {
@@ -4196,6 +4379,7 @@ async function refreshAccess() {
   state.departmentFiles = latest.departmentFiles || [];
   state.usageAnalytics = latest.usageAnalytics || [];
   state.authenticated = latest.authenticated;
+  state.moduleAccess = latest.moduleAccess || state.moduleAccess || {};
   if (latest.profileImageDataUrl !== undefined) {
     state.profileImagesByUser[state.access.username] = latest.profileImageDataUrl || "";
   }
@@ -4376,6 +4560,7 @@ async function initialize() {
     state.profileImageDataUrl = initial.profileImageDataUrl || "";
     if (state.access?.username) state.profileImagesByUser[state.access.username] = state.profileImageDataUrl;
     state.codeRequirementPreview = initial.codeRequirementPreview || state.codeRequirementPreview;
+    state.moduleAccess = initial.moduleAccess || state.moduleAccess || {};
     if ($("#currentAppVersion")) $("#currentAppVersion").textContent = `Current version ${initial.appVersion || "1.0.0"}`;
     if ($("#sharePath")) $("#sharePath").value = initial.config?.sharePath || "";
     if ($("#autoUpdate")) $("#autoUpdate").checked = initial.config?.autoUpdate !== false;
@@ -5152,6 +5337,9 @@ $("#saveDepartmentFile")?.addEventListener("click", async () => {
     button.textContent = "Save";
   }
 });
+$("#moduleAccessScopeType")?.addEventListener("change", () => renderModuleAccessPanel());
+$("#moduleAccessDepartment")?.addEventListener("change", () => renderModuleAccessList());
+$("#moduleAccessUser")?.addEventListener("change", () => renderModuleAccessList());
 $("#saveSubAdmin")?.addEventListener("click", async (event) => {
   event.preventDefault();
   const saveButton = $("#saveSubAdmin");

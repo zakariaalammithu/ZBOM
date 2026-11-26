@@ -45,6 +45,7 @@
           <button class="submodule-nav" data-view="administration" data-admin-section="adminPasswordPanel"><i>└</i> Password Control</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="departmentUploadPanel"><i>└</i> File Upload</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="accountManagementPanel"><i>└</i> Account Management</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="moduleAccessPanel"><i>└</i> Module Access Control</button>
         </div>
         <button data-view="settings"><i>⚙</i> Settings</button>
       </nav>
@@ -503,6 +504,20 @@
               <button type="button" class="primary" id="saveSubAdmin">Add / Update Account</button>
             </div>
             <div class="subadmin-list" id="subAdminList"></div>
+          </div>
+          <div class="panel main-admin-only" id="moduleAccessPanel">
+            <div class="panel-title"><div><h3>Module Access Control</h3><p>Enable or disable each file / module separately, for one user or for a whole department. A disabled module is hidden from that user and cannot be opened — including from the backend.</p></div><span class="role-chip">FULL CONTROL</span></div>
+            <div class="admin-form">
+              <label>Control for<select id="moduleAccessScopeType"><option value="department">Department (all users in it)</option><option value="user">One user</option></select></label>
+              <label>Department<select id="moduleAccessDepartment"></select></label>
+              <label id="moduleAccessUserField" class="hidden">User<select id="moduleAccessUser"></select></label>
+              <div class="module-access-list" id="moduleAccessList"></div>
+              <p class="module-access-note" id="moduleAccessNote">Choose a department or a user above. Changes apply immediately.</p>
+            </div>
+            <div class="module-access-audit">
+              <div class="panel-title"><div><h3>Access Change History</h3><p>Every enable / disable change, with who made it and when.</p></div><span class="role-chip" id="moduleAccessAuditCount">0 CHANGES</span></div>
+              <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>Date &amp; Time</th><th>Changed By</th><th>Module</th><th>Scope</th><th>Change</th></tr></thead><tbody id="moduleAccessAuditTable"></tbody></table></div>
+            </div>
           </div>
         </div>
       </section>
