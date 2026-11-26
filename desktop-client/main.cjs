@@ -467,19 +467,41 @@ async function loadAccessRegistry(config, force = false) {
   cachedAccessRegistryTime = now;
 
   const sharedPath = accessFile(config?.sharePath);
-  if (sharedPath) {
-    Promise.race([
-      fsp.readFile(sharedPath, "utf8"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
-    ]).then((data) => {
-      try {
-        const remote = JSON.parse(data);
-        if (remote && remote.departments) {
-          cachedAccessRegistry = remote;
-          writeJsonAtomic(userFile("access-cache.json"), remote).catch(() => {});
-        }
-      } catch {}
-    }).catch(() => {});
+  const readShared = async () => {
+    if (!sharedPath) return null;
+    try {
+      const data = await Promise.race([
+        fsp.readFile(sharedPath, "utf8"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
+      ]);
+      const remote = JSON.parse(data);
+      if (remote && remote.departments) return remote;
+    } catch {}
+    return null;
+  };
+
+  if (force) {
+    // Password checks must see the credential that is actually on the
+    // share right now (e.g. right after access.json was replaced for a
+    // password reset). Wait for the share read instead of returning the
+    // stale local cache. Falls back to the local cache when the share
+    // cannot be reached, so offline sign-in still works.
+    const remote = await readShared();
+    if (remote) {
+      registry = remote;
+      cachedAccessRegistry = remote;
+      cachedAccessRegistryTime = Date.now();
+      writeJsonAtomic(userFile("access-cache.json"), remote).catch(() => {});
+    }
+  } else if (sharedPath) {
+    // Background refresh for the normal fast path.
+    readShared().then((remote) => {
+      if (remote) {
+        cachedAccessRegistry = remote;
+        cachedAccessRegistryTime = Date.now();
+        writeJsonAtomic(userFile("access-cache.json"), remote).catch(() => {});
+      }
+    });
   }
 
   registry.departments = registry.departments?.length ? registry.departments : DEFAULT_DEPARTMENTS;
@@ -586,7 +608,11 @@ async function verifyAdminPassword(usernameInput, password) {
   const username = String(usernameInput || "").trim().toLowerCase();
   if (!username) return { accountExists: false, active: false, valid: false };
   const config = await getConfig();
-  const registry = await loadAccessRegistry(config);
+  // Force a fresh read of the share's access.json: sign-in (and the
+  // current-password check) must be judged against the credential on
+  // the share right now, not a cached copy from before access.json
+  // was replaced.
+  const registry = await loadAccessRegistry(config, true);
   const access = await getCurrentAccess(username);
   const registeredAccount = (registry.subAdmins || []).find(
     (admin) => String(admin.windowsUsername || "").toLowerCase() === access.username
