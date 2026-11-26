@@ -1849,6 +1849,26 @@ function createWindow() {
     },
   });
   mainWindow.setMenuBarVisibility(false);
+  // Downloads go straight to the Downloads folder with no Save dialog:
+  // clicking a download button (Example File, Download Excel, exports,
+  // ZKNG / LSMW / Routing ready files, ...) saves the file directly.
+  // A number is added when the same name already exists, so an earlier
+  // download is never overwritten.
+  mainWindow.webContents.session.on("will-download", (_event, item) => {
+    try {
+      const downloadsDir = app.getPath("downloads");
+      const filename = item.getFilename() || "download";
+      const ext = path.extname(filename);
+      const base = path.basename(filename, ext);
+      let candidate = path.join(downloadsDir, filename);
+      let n = 1;
+      while (fs.existsSync(candidate)) {
+        n += 1;
+        candidate = path.join(downloadsDir, `${base} (${n})${ext}`);
+      }
+      item.setSavePath(candidate);
+    } catch {}
+  });
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     try {
       const logLine = `[RENDERER ${level}] ${message} (${sourceId}:${line})\n`;
