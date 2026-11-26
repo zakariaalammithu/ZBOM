@@ -46,6 +46,7 @@
           <button class="submodule-nav" data-view="administration" data-admin-section="departmentUploadPanel"><i>└</i> File Upload</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="accountManagementPanel"><i>└</i> Account Management</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="moduleAccessPanel"><i>└</i> Module Access Control</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="userActivityPanel"><i>└</i> User Activity Summary</button>
         </div>
         <button data-view="settings"><i>⚙</i> Settings</button>
       </nav>
@@ -517,6 +518,36 @@
             <div class="module-access-audit">
               <div class="panel-title"><div><h3>Access Change History</h3><p>Every enable / disable change, with who made it and when.</p></div><span class="role-chip" id="moduleAccessAuditCount">0 CHANGES</span></div>
               <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>Date &amp; Time</th><th>Changed By</th><th>Module</th><th>Scope</th><th>Change</th></tr></thead><tbody id="moduleAccessAuditTable"></tbody></table></div>
+            </div>
+          </div>
+          <div class="panel main-admin-only" id="userActivityPanel">
+            <div class="panel-title"><div><h3>User Activity Summary &amp; Monitoring</h3><p>Select any user to see their profile, permissions, and full activity history. Activity comes only from the recorded audit log — when a user has no recorded activity, it shows "No Historical Data Available".</p></div><span class="role-chip">MAIN ADMIN ONLY</span></div>
+            <div class="user-activity-overview" id="userActivityOverview"></div>
+            <div class="admin-form">
+              <label>User<select id="userActivityUser"></select></label>
+            </div>
+            <div class="user-activity-grid">
+              <div class="user-activity-card">
+                <h4>User Profile Summary</h4>
+                <div class="user-activity-profile" id="userActivityProfile"></div>
+              </div>
+              <div class="user-activity-card">
+                <h4>Permission Summary</h4>
+                <div id="userActivityPermissions"></div>
+              </div>
+            </div>
+            <div class="user-activity-cards" id="userActivitySummary"></div>
+            <div class="user-activity-history">
+              <div class="panel-title"><div><h3>Complete Activity History</h3><p>Every recorded action for the selected user.</p></div><span class="role-chip" id="userActivityCount">0 ACTIVITIES</span></div>
+              <div class="user-activity-filters">
+                <input id="userActivitySearch" placeholder="Search activity, file, module…">
+                <input type="date" id="userActivityFrom" title="From date">
+                <input type="date" id="userActivityTo" title="To date">
+                <select id="userActivityModuleFilter"><option value="">All modules</option></select>
+                <input id="userActivityFileFilter" placeholder="Filter by file…">
+                <button class="secondary" id="userActivityExport">Export CSV</button>
+              </div>
+              <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>Date &amp; Time</th><th>Action</th><th>Module</th><th>File</th><th>Details</th><th>Status</th></tr></thead><tbody id="userActivityTable"></tbody></table></div>
             </div>
           </div>
         </div>

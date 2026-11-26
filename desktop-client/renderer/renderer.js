@@ -7,6 +7,8 @@ const state = {
   departmentStatuses: {},
   departmentFiles: [],
   usageAnalytics: [],
+  userActivity: null,
+  userActivitySelected: "",
   viewStartedAt: Date.now(),
   authenticated: false,
   profileImageDataUrl: "",
@@ -3484,7 +3486,7 @@ function changeView(view) {
     }[previousView] || previousView;
     if (previousView && window.erp && typeof window.erp.recordUsage === "function") {
       try {
-        window.erp.recordUsage({ module: previousLabel, seconds, file: state.departmentStatuses?.[state.department]?.file || "" }).catch(() => {});
+        window.erp.recordUsage({ module: previousLabel, moduleId: previousView, seconds, file: state.departmentStatuses?.[state.department]?.file || "" }).catch(() => {});
       } catch (e) {}
     }
     state.view = view;
@@ -4223,6 +4225,7 @@ function renderAccess() {
     $("#summarySubmodules")?.classList.add("hidden");
   }
   if (isMainAdmin) loadModuleAccessPanel();
+  if (isMainAdmin) loadUserActivityPanel();
   renderSubAdmins();
   renderDepartmentFiles();
   if (isFullAdmin) renderPasswordAccounts();
@@ -4369,6 +4372,293 @@ function renderModuleAccessAudit() {
     });
     return tr;
   }));
+}
+
+// ---------------------------------------------------------------------------
+// User Activity Summary & Monitoring (Admin only)
+// ---------------------------------------------------------------------------
+// Data comes only from the recorded activity log (ZBOM-Admin/user-activity.json)
+// and the account registry — nothing is invented. A user with no recorded
+// activity shows "No Historical Data Available".
+let userActivityPanelLoaded = false;
+const USER_ACTIVITY_ACTION_LABELS = {
+  login: "Login", logout: "Logout", module_open: "Module Open", file_access: "File Access",
+  upload: "Upload", download: "Download", import: "Import", export: "Export",
+  create: "Create", edit: "Edit", delete: "Delete", permission_change: "Permission Change",
+};
+async function loadUserActivityPanel(force = false) {
+  if (!force && userActivityPanelLoaded) return;
+  if (!window.erp || typeof window.erp.getUserActivity !== "function") return;
+  try {
+    const result = await window.erp.getUserActivity(state.userActivitySelected || "");
+    if (!result.ok) return;
+    state.userActivity = result;
+    userActivityPanelLoaded = true;
+    renderUserActivityPanel();
+  } catch {}
+}
+function userActivitySelectedUser() {
+  const users = state.userActivity?.users || [];
+  return users.find((u) => u.employeeId === state.userActivitySelected)
+    || users.find((u) => u.username === state.userActivitySelected)
+    || users[0] || null;
+}
+function userActivityFormatDate(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return isNaN(d) ? "—" : d.toLocaleString();
+}
+function renderUserActivityPanel() {
+  const data = state.userActivity;
+  if (!data) return;
+  const users = data.users || [];
+  const overview = data.overview || {};
+  const overviewEl = $("#userActivityOverview");
+  if (overviewEl) {
+    const mostUsed = (overview.mostUsedModules || []).map((m) => `${m.moduleLabel || m.module} (${m.count})`).join(" · ") || "No module usage recorded yet";
+    overviewEl.innerHTML = "";
+    [
+      ["Total Users", String(overview.totalUsers || 0)],
+      ["Active Users", String(overview.activeUsers || 0)],
+      ["Inactive Users", String(overview.inactiveUsers || 0)],
+      ["Most Used Modules", mostUsed],
+    ].forEach(([label, value]) => {
+      const box = document.createElement("div");
+      box.className = "user-activity-overview-box";
+      const b = document.createElement("b");
+      b.textContent = value;
+      const span = document.createElement("span");
+      span.textContent = label;
+      box.appendChild(b);
+      box.appendChild(span);
+      overviewEl.appendChild(box);
+    });
+  }
+  const select = $("#userActivityUser");
+  if (select) {
+    const previous = state.userActivitySelected;
+    select.innerHTML = "";
+    users.forEach((user) => {
+      const option = document.createElement("option");
+      option.value = user.employeeId;
+      option.textContent = `${user.fullName || user.username} — ${user.employeeId}`;
+      select.appendChild(option);
+    });
+    if (previous && users.some((u) => u.employeeId === previous)) select.value = previous;
+    else if (users.length) { select.value = users[0].employeeId; state.userActivitySelected = users[0].employeeId; }
+  }
+  renderUserActivityDetails();
+}
+function renderUserActivityDetails() {
+  const user = userActivitySelectedUser();
+  if (!user) return;
+  const profile = $("#userActivityProfile");
+  if (profile) {
+    const rows = [
+      ["Full Name", user.fullName || "—"],
+      ["Employee ID", user.employeeId || "—"],
+      ["Username", user.username || "—"],
+      ["Department", user.department || "—"],
+      ["Designation", user.designation || "—"],
+      ["Assigned Role", ({ guest: "Guest User", standard_user: "Standard User", power_user: "Power User", master_user: "Master User", department_head: "Department Head", admin: "Admin", main_admin: "Main Admin" })[user.role] || "Standard User"],
+      ["Account Status", user.active ? "Active" : "Inactive"],
+      ["Account Created", user.createdAt ? userActivityFormatDate(user.createdAt) : "Not recorded"],
+      ["Last Login", user.lastLoginAt ? userActivityFormatDate(user.lastLoginAt) : "Never"],
+      ["Last Logout", user.lastLogoutAt ? userActivityFormatDate(user.lastLogoutAt) : "Never"],
+    ];
+    profile.innerHTML = "";
+    rows.forEach(([label, value]) => {
+      const row = document.createElement("div");
+      row.className = "user-activity-kv";
+      const k = document.createElement("span");
+      k.textContent = label;
+      const v = document.createElement("b");
+      v.textContent = value;
+      row.appendChild(k);
+      row.appendChild(v);
+      profile.appendChild(row);
+    });
+  }
+  const perm = $("#userActivityPermissions");
+  if (perm) {
+    perm.innerHTML = "";
+    const modules = MODULE_ACCESS_MODULES || [];
+    const allowed = modules.filter((m) => user.moduleAccess?.[m.id] !== false);
+    const disabled = modules.filter((m) => user.moduleAccess?.[m.id] === false);
+    const section = (title, items, emptyText, cls) => {
+      const h = document.createElement("h5");
+      h.textContent = title;
+      perm.appendChild(h);
+      const wrap = document.createElement("div");
+      wrap.className = "user-activity-chips";
+      if (!items.length) {
+        const span = document.createElement("span");
+        span.className = "user-activity-chip muted";
+        span.textContent = emptyText;
+        wrap.appendChild(span);
+      } else {
+        items.forEach((item) => {
+          const span = document.createElement("span");
+          span.className = `user-activity-chip ${cls || ""}`;
+          span.textContent = item;
+          wrap.appendChild(span);
+        });
+      }
+      perm.appendChild(wrap);
+    };
+    section("Modules this user can access", allowed.map((m) => m.label), "None", "ok");
+    section("Modules disabled for this user", disabled.map((m) => m.label), "None disabled", "bad");
+    section("File access (account file permissions)", (user.filePermissions || []).length ? user.filePermissions : [], "No file permissions assigned", "");
+    section("Departments whose data this user can access", user.departments || [], "None", "");
+    const flags = user.permissions || {};
+    const flagRows = [
+      ["View", flags.view], ["Create", flags.create], ["Edit", flags.edit], ["Delete", flags.delete],
+      ["Upload", flags.upload], ["Import / Export", flags.importExport], ["Approve / Reject", flags.approve],
+    ];
+    const h = document.createElement("h5");
+    h.textContent = "Permissions";
+    perm.appendChild(h);
+    const flagWrap = document.createElement("div");
+    flagWrap.className = "user-activity-chips";
+    flagRows.forEach(([label, yes]) => {
+      const span = document.createElement("span");
+      span.className = `user-activity-chip ${yes ? "ok" : "bad"}`;
+      span.textContent = `${label}: ${yes ? "Yes" : "No"}`;
+      flagWrap.appendChild(span);
+    });
+    perm.appendChild(flagWrap);
+  }
+  const summary = $("#userActivitySummary");
+  if (summary) {
+    const s = user.activitySummary || {};
+    summary.innerHTML = "";
+    const cards = [
+      ["Last Used Module", s.lastModuleLabel || "No Historical Data Available"],
+      ["Last Used File", s.lastFile || "No Historical Data Available"],
+      ["Last Access", s.lastAccessAt ? userActivityFormatDate(s.lastAccessAt) : "No Historical Data Available"],
+      ["Total File Access", String(s.totalFileAccess || 0)],
+      ["Total Upload", String(s.totalUpload || 0)],
+      ["Total Download", String(s.totalDownload || 0)],
+      ["Total Import / Export", String(s.totalImportExport || 0)],
+      ["Last Data Update", s.lastDataUpdateAt ? userActivityFormatDate(s.lastDataUpdateAt) : "No Historical Data Available"],
+      ["Total Activities", String(s.totalActivities || 0)],
+    ];
+    cards.forEach(([label, value]) => {
+      const box = document.createElement("div");
+      box.className = "user-activity-card-box";
+      const b = document.createElement("b");
+      b.textContent = value;
+      const span = document.createElement("span");
+      span.textContent = label;
+      box.appendChild(b);
+      box.appendChild(span);
+      summary.appendChild(box);
+    });
+  }
+  renderUserActivityTable();
+}
+function userActivityFilteredEvents() {
+  const user = userActivitySelectedUser();
+  if (!user) return [];
+  const all = state.userActivity?.activity || [];
+  const matchIds = user.matchIds || [user.employeeId, user.username];
+  const events = all.filter((e) => matchIds.includes(e.by));
+  const search = ($("#userActivitySearch")?.value || "").trim().toLowerCase();
+  const from = $("#userActivityFrom")?.value || "";
+  const to = $("#userActivityTo")?.value || "";
+  const moduleFilter = $("#userActivityModuleFilter")?.value || "";
+  const fileFilter = ($("#userActivityFileFilter")?.value || "").trim().toLowerCase();
+  return events.filter((e) => {
+    if (search) {
+      const hay = `${e.action} ${e.moduleLabel || e.module || ""} ${e.file || ""} ${e.detail || ""}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    if (from && String(e.at || "").slice(0, 10) < from) return false;
+    if (to && String(e.at || "").slice(0, 10) > to) return false;
+    if (moduleFilter && (e.module || e.moduleLabel) !== moduleFilter) return false;
+    if (fileFilter && !(e.file || "").toLowerCase().includes(fileFilter)) return false;
+    return true;
+  });
+}
+function renderUserActivityTable() {
+  const body = $("#userActivityTable");
+  if (!body) return;
+  const user = userActivitySelectedUser();
+  const events = userActivityFilteredEvents();
+  const count = $("#userActivityCount");
+  if (count) count.textContent = `${events.length} ACTIVIT${events.length === 1 ? "Y" : "IES"}`;
+  const moduleFilter = $("#userActivityModuleFilter");
+  if (moduleFilter) {
+    const current = moduleFilter.value;
+    const modules = [...new Set((state.userActivity?.activity || []).filter((e) => (user?.matchIds || []).includes(e.by)).map((e) => e.module || e.moduleLabel).filter(Boolean))];
+    moduleFilter.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "All modules";
+    moduleFilter.appendChild(allOpt);
+    modules.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      moduleFilter.appendChild(opt);
+    });
+    if (current && modules.includes(current)) moduleFilter.value = current;
+  }
+  body.innerHTML = "";
+  if (!events.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.textContent = user?.hasActivity
+      ? "No activities match the current filters."
+      : "No Historical Data Available — no activity has been recorded for this user yet. Future activity will appear here automatically.";
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  events.forEach((e) => {
+    const row = document.createElement("tr");
+    const d = new Date(e.at);
+    const dateStr = isNaN(d) ? (e.at || "—") : d.toLocaleString();
+    const values = [
+      dateStr,
+      USER_ACTIVITY_ACTION_LABELS[e.action] || e.action || "—",
+      e.moduleLabel || e.module || "—",
+      e.file || "—",
+      e.detail || "—",
+      e.status === "failed" ? "Failed" : "Success",
+    ];
+    values.forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      cell.title = String(value);
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  });
+}
+function exportUserActivityCsv() {
+  const user = userActivitySelectedUser();
+  if (!user) return;
+  const events = userActivityFilteredEvents();
+  const esc = (v) => `"${String(v ?? "").replaceAll('"', '""')}"`;
+  const lines = [["Date & Time", "Action", "Module", "File", "Details", "Status"].map(esc).join(",")];
+  events.forEach((e) => {
+    lines.push([
+      e.at || "", USER_ACTIVITY_ACTION_LABELS[e.action] || e.action || "",
+      e.moduleLabel || e.module || "", e.file || "", e.detail || "",
+      e.status === "failed" ? "Failed" : "Success",
+    ].map(esc).join(","));
+  });
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ZBOM-User-Activity-${(user.employeeId || "user").replace(/[^a-z0-9]+/gi, "-")}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function refreshAccess() {
@@ -5337,6 +5627,15 @@ $("#saveDepartmentFile")?.addEventListener("click", async () => {
     button.textContent = "Save";
   }
 });
+$("#userActivityUser")?.addEventListener("change", (event) => {
+  state.userActivitySelected = event.target.value;
+  renderUserActivityDetails();
+});
+["userActivitySearch", "userActivityFrom", "userActivityTo", "userActivityModuleFilter", "userActivityFileFilter"].forEach((id) => {
+  $(`#${id}`)?.addEventListener("input", () => renderUserActivityTable());
+  $(`#${id}`)?.addEventListener("change", () => renderUserActivityTable());
+});
+$("#userActivityExport")?.addEventListener("click", () => exportUserActivityCsv());
 $("#moduleAccessScopeType")?.addEventListener("change", () => renderModuleAccessPanel());
 $("#moduleAccessDepartment")?.addEventListener("change", () => renderModuleAccessList());
 $("#moduleAccessUser")?.addEventListener("change", () => renderModuleAccessList());
@@ -5617,6 +5916,7 @@ $("#importRoutingMaterial")?.addEventListener("click", async () => {
     if (result.state) {
       state.routing = result.state;
       renderRoutingState();
+      if (result.ok) window.erp.recordUsage({ action: "import", module: "Routing Material Import", moduleId: "routingUploadFormat", seconds: 0, file: result.state.materialFile || "", detail: result.message }).catch(() => {});
     }
   } catch (error) {
     hideProcessingOverlay();
@@ -5637,7 +5937,10 @@ $("#importZkngMaterial")?.addEventListener("click", async () => {
     hideProcessingOverlay();
     if (result.canceled) return;
     showNotice(result.message, result.ok && !result.state?.unmatchedRows ? "success" : "warning");
-    if (result.state) { state.zkng = result.state; renderZkngState(); }
+    if (result.state) {
+      state.zkng = result.state; renderZkngState();
+      if (result.ok) window.erp.recordUsage({ action: "import", module: "ZKNG Material Import", moduleId: "zkngMaterialUpload", seconds: 0, file: result.state.materialFile || "", detail: result.message }).catch(() => {});
+    }
   } catch (error) {
     hideProcessingOverlay();
     showNotice(`ZKNG Material import failed: ${error.message}`, "warning");
@@ -5737,7 +6040,10 @@ $("#importLsmwBomMaterial")?.addEventListener("click", async () => {
       hideProcessingOverlay();
       if (result.canceled) return;
       showNotice(result.message, result.ok ? "success" : "warning");
-      if (result.state) { state.lsmwBom = result.state; renderLsmwBomState(); }
+      if (result.state) {
+        state.lsmwBom = result.state; renderLsmwBomState();
+        if (result.ok) window.erp.recordUsage({ action: "import", module: "LSMW BOM Import", moduleId: "lsmwBomUpload", seconds: 0, file: result.state.materialFile || "", detail: result.message }).catch(() => {});
+      }
     } else {
       hideProcessingOverlay();
       showNotice("BOM file processing ready.", "info");
@@ -5792,7 +6098,10 @@ $("#importCharacteristicsMaterial")?.addEventListener("click", async () => {
       hideProcessingOverlay();
       if (result.canceled) return;
       showNotice(result.message, result.ok ? "success" : "warning");
-      if (result.state) { state.characteristics = result.state; renderCharacteristicsState(); }
+      if (result.state) {
+        state.characteristics = result.state; renderCharacteristicsState();
+        if (result.ok) window.erp.recordUsage({ action: "import", module: "Characteristics Import", moduleId: "characteristicsUpload", seconds: 0, file: result.state.materialFile || "", detail: result.message }).catch(() => {});
+      }
     }
   } catch (error) {
     hideProcessingOverlay();

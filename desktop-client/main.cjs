@@ -55,6 +55,7 @@ let previewWatcher;
 let currentActiveSession = null;
 const authenticatedAdminSessions = new Map();
 const accountActivitySessions = new Map();
+const lastModuleOpenByUser = new Map();
 const isPreview = process.env.ZBOM_PREVIEW === "1";
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const ROLES = ["guest", "standard_user", "power_user", "master_user", "department_head", "admin"];
@@ -596,9 +597,6 @@ function moduleAccessFile(sharePath) {
 function moduleAccessAuditFile(sharePath) {
   return path.join(sharePath, "ZBOM-Admin", "module-access-audit.json");
 }
-function departmentSlug(name) {
-  return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
 function emptyModuleAccess() {
   return { version: 1, updatedAt: "", updatedBy: "", userDenies: {}, departmentDenies: {} };
 }
@@ -720,6 +718,91 @@ async function moduleAccessDenied(event, moduleId) {
   if (!isModuleDeniedFor(rules, key, access.departments, moduleId)) return null;
   const label = (MODULE_ACCESS_MODULES.find((m) => m.id === moduleId) || {}).label || moduleId;
   return { ok: false, message: `Access to ${label} is disabled by the Admin.` };
+}
+
+// ---------------------------------------------------------------------------
+// User Activity Log (Admin — User Activity Summary & Monitoring)
+// ---------------------------------------------------------------------------
+// Every important user action is appended here (newest first, capped at
+// 2000 entries) on the LAN share (ZBOM-Admin/user-activity.json) with a
+// local cache fallback. The Admin dashboard reads this file — nothing is
+// invented: when a user has no entries, the dashboard shows
+// "No Historical Data Available".
+const USER_ACTIVITY_MAX_ENTRIES = 2000;
+function userActivityFile(sharePath) {
+  return path.join(sharePath, "ZBOM-Admin", "user-activity.json");
+}
+async function loadUserActivity(config) {
+  const fallback = await readJson(userFile("user-activity-cache.json"), []);
+  const list = Array.isArray(fallback) ? fallback : [];
+  const sharedPath = config?.sharePath ? userActivityFile(config.sharePath) : null;
+  if (sharedPath) {
+    try {
+      const data = await Promise.race([
+        fsp.readFile(sharedPath, "utf8"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
+      ]);
+      const remote = JSON.parse(data);
+      if (Array.isArray(remote)) return remote;
+    } catch {}
+  }
+  return list;
+}
+async function appendUserActivity(config, entry) {
+  const list = await loadUserActivity(config);
+  list.unshift(entry);
+  const trimmed = list.slice(0, USER_ACTIVITY_MAX_ENTRIES);
+  try {
+    await writeJsonAtomic(userActivityFile(config.sharePath), trimmed);
+  } catch {}
+  await writeJsonAtomic(userFile("user-activity-cache.json"), trimmed).catch(() => {});
+  return trimmed;
+}
+function userActivityEntry({ by, byName, action, module = "", moduleLabel = "", file = "", detail = "", status = "success" }) {
+  return {
+    at: new Date().toISOString(),
+    by: String(by || "").trim().toLowerCase(),
+    byName: byName || "",
+    action, module, moduleLabel, file, detail, status,
+  };
+}
+async function logUserActivityByUser(username, fullName, entry) {
+  try {
+    const config = await getConfig();
+    await appendUserActivity(config, userActivityEntry({ by: username, byName: fullName, ...entry }));
+  } catch {}
+}
+async function logUserActivity(event, entry) {
+  try {
+    const access = await accessForEvent(event);
+    await logUserActivityByUser(access.employeeId || access.username, access.fullName, entry);
+  } catch {}
+}
+async function recordAccountLogout(username) {
+  const config = await getConfig();
+  const registry = await loadAccessRegistry(config);
+  const normalized = String(username || "").trim().toLowerCase();
+  const now = new Date().toISOString();
+  let activity = null;
+  if (MAIN_ADMIN_USERS.has(normalized)) {
+    registry.mainAdminActivity ||= {};
+    activity = registry.mainAdminActivity;
+  } else {
+    activity = (registry.subAdmins || []).find(
+      (account) => String(account.windowsUsername || "").trim().toLowerCase() === normalized
+        || String(account.employeeId || "").trim().toLowerCase() === normalized,
+    );
+  }
+  if (!activity) return;
+  activity.lastLogoutAt = now;
+  activity.lastSeenAt = now;
+  registry.version = Date.now();
+  try {
+    await writeJsonAtomic(accessFile(config.sharePath), registry);
+  } catch {}
+  await writeJsonAtomic(userFile("access-cache.json"), registry);
+  cachedAccessRegistry = registry;
+  cachedAccessRegistryTime = Date.now();
 }
 
 async function getCurrentAccess(usernameOverride = "") {
@@ -854,6 +937,7 @@ async function saveSubAdmin(record, access) {
       : (Array.isArray(existing?.filePermissions) ? existing.filePermissions : []),
     updatedAt: new Date().toISOString(),
     updatedBy: access.username,
+    createdAt: existing ? (existing.createdAt || "") : new Date().toISOString(),
   };
   if (existingIndex >= 0) subAdmins[existingIndex] = account;
   else subAdmins.push(account);
@@ -1032,6 +1116,10 @@ async function changeAccountRole(username, role, access) {
   account.updatedAt = new Date().toISOString();
   account.updatedBy = access.username;
   await saveAccessRegistry(config, registry);
+  logUserActivityByUser(normalized, account.fullName, {
+    action: "permission_change",
+    detail: `Role changed to ${roleLabel(role)} by ${access.fullName || "Main Admin"}.`,
+  }).catch(() => {});
   return {
     ok: true,
     message: `${account.fullName}'s role changed to ${roleLabel(role)}.`,
@@ -2101,6 +2189,125 @@ app.whenReady().then(async () => {
       moduleAccess: await effectiveModuleAccessForAccess(access),
     };
   });
+function rolePermissionFlags(role) {
+  const perms = ROLE_PERMISSIONS[normalizeRole(role)] || new Set();
+  const manage = perms.has("manage_own_data") || perms.has("manage_all_data");
+  return {
+    view: perms.has("view"),
+    create: manage,
+    edit: manage,
+    delete: manage,
+    upload: perms.has("upload"),
+    importExport: perms.has("import") || perms.has("export"),
+    approve: perms.has("approve"),
+  };
+}
+function summarizeUserActivity(events) {
+  const byAction = {};
+  for (const e of events) byAction[e.action] = (byAction[e.action] || 0) + 1;
+  const lastModuleEvent = events.find((e) => e.action === "module_open" || e.action === "download");
+  const lastDataEvent = events.find((e) => ["upload", "import", "export", "create", "edit", "delete"].includes(e.action));
+  return {
+    totalActivities: events.length,
+    totalFileAccess: (byAction.module_open || 0) + (byAction.file_access || 0),
+    totalUpload: byAction.upload || 0,
+    totalDownload: byAction.download || 0,
+    totalImportExport: (byAction.import || 0) + (byAction.export || 0),
+    lastModule: lastModuleEvent?.module || "",
+    lastModuleLabel: lastModuleEvent?.moduleLabel || lastModuleEvent?.module || "",
+    lastFile: lastModuleEvent?.file || "",
+    lastAccessAt: events[0]?.at || "",
+    lastDataUpdateAt: lastDataEvent?.at || "",
+  };
+}
+  ipcMain.handle("erp:get-user-activity", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") {
+      return { ok: false, message: "Only the Main Admin can view user activity." };
+    }
+    const config = await getConfig();
+    const registry = await loadAccessRegistry(config);
+    const rules = await loadModuleAccess(config);
+    const activity = await loadUserActivity(config);
+    const selectedId = String(payload?.employeeId || "").trim().toLowerCase();
+    const profiles = [];
+    const mainAdminProfile = {
+      employeeId: "31001625",
+      username: "31001625",
+      fullName: "Zakaria Alam Mithu",
+      department: "All Departments",
+      designation: "Main Admin",
+      role: "main_admin",
+      active: true,
+      createdAt: "",
+      lastLoginAt: registry.mainAdminActivity?.lastLoginAt || "",
+      lastLogoutAt: registry.mainAdminActivity?.lastLogoutAt || "",
+      lastSeenAt: registry.mainAdminActivity?.lastSeenAt || "",
+      loginCount: registry.mainAdminActivity?.loginCount || 0,
+      totalUsageSeconds: registry.mainAdminActivity?.totalUsageSeconds || 0,
+      filePermissions: [],
+      departments: [...(registry.departments || [])],
+      matchIds: ["31001625", "zakaria", "zakaria-sflfu"],
+    };
+    profiles.push(mainAdminProfile);
+    for (const account of registry.subAdmins || []) {
+      const employeeId = String(account.employeeId || "").trim().toLowerCase();
+      const username = String(account.windowsUsername || account.employeeId || "").trim().toLowerCase();
+      profiles.push({
+        employeeId,
+        username,
+        fullName: account.fullName || "",
+        department: account.department || "",
+        designation: account.designation || "",
+        role: normalizeRole(account.role),
+        active: account.active !== false,
+        createdAt: account.createdAt || "",
+        lastLoginAt: account.lastLoginAt || "",
+        lastLogoutAt: account.lastLogoutAt || "",
+        lastSeenAt: account.lastSeenAt || "",
+        loginCount: account.loginCount || 0,
+        totalUsageSeconds: account.totalUsageSeconds || 0,
+        filePermissions: Array.isArray(account.filePermissions) ? account.filePermissions : [],
+        departments: ["main_admin", "admin", "master_user"].includes(normalizeRole(account.role))
+          ? [...(registry.departments || [])]
+          : (account.department ? [account.department] : []),
+        matchIds: [...new Set([employeeId, username].filter(Boolean))],
+      });
+    }
+    for (const profile of profiles) {
+      profile.permissions = rolePermissionFlags(profile.role);
+      profile.moduleAccess = effectiveModuleAccess(rules, profile.employeeId, profile.departments, profile.role === "main_admin");
+      profile.disabledModules = MODULE_ACCESS_MODULES.filter((m) => profile.moduleAccess[m.id] === false).map((m) => m.id);
+      const events = activity.filter((e) => profile.matchIds.includes(e.by));
+      profile.activitySummary = summarizeUserActivity(events);
+      profile.hasActivity = events.length > 0;
+    }
+    const moduleCounts = {};
+    for (const e of activity) {
+      if (e.action === "module_open" && (e.module || e.moduleLabel)) {
+        const key = e.module || e.moduleLabel;
+        moduleCounts[key] = moduleCounts[key] || { module: key, moduleLabel: e.moduleLabel || key, count: 0 };
+        moduleCounts[key].count += 1;
+      }
+    }
+    const mostUsedModules = Object.values(moduleCounts).sort((a, b) => b.count - a.count).slice(0, 5);
+    const filtered = selectedId ? activity.filter((e) => {
+      const profile = profiles.find((u) => u.employeeId === selectedId || u.username === selectedId);
+      return profile ? profile.matchIds.includes(e.by) : e.by === selectedId;
+    }) : activity;
+    return {
+      ok: true,
+      users: profiles,
+      activity: filtered.slice(0, 500),
+      totalActivityEntries: activity.length,
+      overview: {
+        totalUsers: profiles.length,
+        activeUsers: profiles.filter((u) => u.active).length,
+        inactiveUsers: profiles.filter((u) => !u.active).length,
+        mostUsedModules,
+      },
+    };
+  });
   ipcMain.handle("erp:get-module-access", async (event) => {
     const access = await accessForEvent(event);
     const config = await getConfig();
@@ -2225,7 +2432,46 @@ app.whenReady().then(async () => {
     return { ok: true, path: filePath };
   });
   ipcMain.handle("erp:open-path", (_event, target) => shell.openPath(target));
-  ipcMain.handle("erp:record-usage", async () => ({ ok: true }));
+  ipcMain.handle("erp:record-usage", async (event, payload) => {
+    try {
+      const access = await accessForEvent(event);
+      const username = String(access.employeeId || access.username || "").trim().toLowerCase();
+      if (!username) return { ok: true };
+      const label = String(payload?.module || "").trim();
+      const file = String(payload?.file || "").trim();
+      const moduleId = String(payload?.moduleId || "").trim();
+      const seconds = Math.max(0, Math.round(Number(payload?.seconds) || 0));
+      const now = Date.now();
+      const explicitAction = String(payload?.action || "").trim();
+      if (explicitAction) {
+        await logUserActivityByUser(username, access.fullName, {
+          action: explicitAction, module: moduleId, moduleLabel: label, file,
+          detail: String(payload?.detail || "").trim() || (file ? `${label} — ${file}.` : `${label}.`),
+        });
+      } else if (/download/i.test(label)) {
+        await logUserActivityByUser(username, access.fullName, {
+          action: "download", module: moduleId, moduleLabel: label, file,
+          detail: file ? `Downloaded ${file}.` : "Downloaded a ready file.",
+        });
+      } else if (label) {
+        // Module open: at most once a minute per user+module, so rapid
+        // view switching does not flood the log.
+        const key = `${username}|${moduleId || label}`;
+        const lastAt = lastModuleOpenByUser.get(key) || 0;
+        if (now - lastAt > 60000) {
+          lastModuleOpenByUser.set(key, now);
+          await logUserActivityByUser(username, access.fullName, {
+            action: "module_open", module: moduleId, moduleLabel: label, file,
+            detail: `Opened ${label}.`,
+          });
+        }
+      }
+      if (seconds > 0) {
+        await recordAccountActivity(username, { seconds }).catch(() => {});
+      }
+    } catch {}
+    return { ok: true };
+  });
   ipcMain.handle("erp:get-characteristics-state", async (event) => {
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
@@ -2645,12 +2891,18 @@ app.whenReady().then(async () => {
     recordAccountActivity(result.access.username, { login: true }).catch((error) => {
       console.warn("Login activity could not be saved:", error.message);
     });
+    logUserActivityByUser(result.access.employeeId || result.access.username, result.access.fullName, {
+      action: "login", detail: `Signed in as ${result.access.fullName || result.access.username}.`,
+    }).catch(() => {});
 
 
     return { ok: true, access: result.access, message: `Signed in as ${result.access.fullName}.` };
   });
   ipcMain.handle("erp:register-account", async (_event, record) => registerUserAccount(record));
   ipcMain.handle("erp:logout", async (event) => {
+    const logoutSession = sessionForEvent(event, false);
+    const logoutUsername = logoutSession?.username || "";
+    const logoutAccess = logoutUsername ? await getCurrentAccess(logoutUsername).catch(() => null) : null;
     currentActiveSession = null;
     authenticatedAdminSessions.clear();
     accountActivitySessions.clear();
@@ -2658,6 +2910,12 @@ app.whenReady().then(async () => {
       console.warn("Logout activity could not be flushed:", error.message);
     });
     void activityFlush;
+    if (logoutUsername) {
+      recordAccountLogout(logoutUsername).catch(() => {});
+      logUserActivityByUser(logoutUsername, logoutAccess?.fullName || "", {
+        action: "logout", detail: `Signed out${logoutAccess?.fullName ? ` (${logoutAccess.fullName})` : ""}.`,
+      }).catch(() => {});
+    }
     return {
       ok: true,
       authenticated: false,

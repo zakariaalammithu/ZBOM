@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("erp", {
   getState: () => ipcRenderer.invoke("erp:get-state"),
   getAccessState: () => ipcRenderer.invoke("erp:get-access"),
   getModuleAccess: () => ipcRenderer.invoke("erp:get-module-access"),
+  getUserActivity: (employeeId) => ipcRenderer.invoke("erp:get-user-activity", { employeeId }),
   setModuleAccess: (payload) => ipcRenderer.invoke("erp:set-module-access", payload),
   update: (force = false) => ipcRenderer.invoke("erp:update", force),
   saveSettings: (settings) => ipcRenderer.invoke("erp:save-settings", settings),
