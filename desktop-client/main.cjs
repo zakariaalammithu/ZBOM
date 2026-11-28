@@ -301,6 +301,386 @@ function trialGate() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared JSON stores (ZBOM-Admin on the office network, local cache fallback)
+// ---------------------------------------------------------------------------
+// Reads prefer the network copy (1500 ms timeout) and fall back to the
+// local cache; writes try the network copy and ALWAYS update the local
+// cache, so a message or review sent while the network is down is kept
+// locally and is visible again when the network returns. Nothing here
+// ever shows the network location to the user.
+// A Windows UNC network path (\\server\share\...) is not a real path on
+// Linux/macOS: fs would treat it as a relative directory name and even
+// create a junk folder with backslashes in its name. ZBOM is a Windows
+// desktop app, so on other platforms a UNC share is simply unreachable
+// and everything falls back to the local cache. A real local folder
+// path (used for testing) still works on any platform.
+const isUncSharePath = (p) => typeof p === "string" && p.startsWith("\\\\");
+const sharePathUsable = (p) => Boolean(p) && (process.platform === "win32" || !isUncSharePath(p));
+function sharedJsonFile(config, name) {
+  return sharePathUsable(config?.sharePath) ? path.join(config.sharePath, "ZBOM-Admin", name) : null;
+}
+function sharedCacheFile(name) {
+  return userFile(`${name.replace(/\.json$/, "")}-cache.json`);
+}
+async function loadSharedJson(config, name, fallback) {
+  const local = await readJson(sharedCacheFile(name), fallback);
+  const sharedPath = sharedJsonFile(config, name);
+  if (!sharedPath) return local;
+  try {
+    const data = await Promise.race([
+      fsp.readFile(sharedPath, "utf8"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 1500)),
+    ]);
+    return JSON.parse(data);
+  } catch {
+    return local;
+  }
+}
+async function saveSharedJson(config, name, value) {
+  const sharedPath = sharedJsonFile(config, name);
+  if (sharedPath) {
+    try { await writeJsonAtomic(sharedPath, value); } catch {}
+  }
+  await writeJsonAtomic(sharedCacheFile(name), value).catch(() => {});
+  return value;
+}
+
+async function isShareReachable(config) {
+  if (!sharePathUsable(config?.sharePath)) return false;
+  return Promise.race([
+    fsp.stat(config.sharePath).then(() => true).catch(() => false),
+    new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Account Validity (3-month default) + Recovery
+// ---------------------------------------------------------------------------
+// Every user account gets a validity period (3 months by default, from
+// creation). When it ends, the account is NOT deleted or disabled: the
+// user can still sign in, but cannot do any file work until the Main
+// Admin renews the account (1 / 2 / 3 / 6 / 12 months, or a custom
+// date). The Main Admin never expires — they are the one who renews
+// everyone else, and expiring them would lock every account out.
+// Guests have no account, so validity does not apply to them; guests
+// are covered by the free trial instead. Validity dates live in the
+// account record in access.json (the office network is the source of
+// truth). Accounts created before this feature are migrated on load:
+// they get 3 months from the upgrade, so nobody is locked out by the
+// upgrade itself.
+// Clock-rollback guard: the last time the app saw an account
+// (lastSeenAt, updated on sign-in) is remembered; if the clock now reads
+// more than a day BEFORE that, the account is treated as expired —
+// rolling the system clock back cannot extend a validity period.
+const VALIDITY_DEFAULT_MONTHS = 3;
+const VALIDITY_MONTH_OPTIONS = [1, 2, 3, 6, 12];
+const VALIDITY_ROLLBACK_TOLERANCE_MS = 24 * 60 * 60 * 1000;
+
+function addMonthsToDate(date, months) {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
+function validityForAccount(account) {
+  if (!account) return { hasAccount: false, valid: true, guest: true, expired: false, validUntil: "", createdAt: "", daysLeft: 0, clockRollback: false };
+  const now = Date.now();
+  const createdAt = String(account.createdAt || "");
+  let expiresMs = Date.parse(String(account.validUntil || ""));
+  if (!Number.isFinite(expiresMs)) {
+    // Defensive fallback (the loadAccessRegistry migration normally sets
+    // validUntil first): 3 months from now.
+    expiresMs = addMonthsToDate(new Date(), VALIDITY_DEFAULT_MONTHS).getTime();
+  }
+  const validUntil = new Date(expiresMs).toISOString();
+  const lastSeen = Date.parse(String(account.lastSeenAt || ""));
+  const clockRollback = Number.isFinite(lastSeen) && now < lastSeen - VALIDITY_ROLLBACK_TOLERANCE_MS;
+  const expired = clockRollback || now >= expiresMs;
+  const daysLeft = Math.max(0, Math.ceil((expiresMs - now) / (24 * 60 * 60 * 1000)));
+  return {
+    hasAccount: true,
+    valid: !expired,
+    expired,
+    clockRollback,
+    validUntil,
+    createdAt,
+    daysLeft,
+    isMainAdmin: false,
+  };
+}
+
+async function getAccountValidityFor(username) {
+  const key = String(username || "").trim().toLowerCase();
+  if (!key) return { hasAccount: false, valid: true, guest: true, expired: false, validUntil: "", createdAt: "", daysLeft: 0, clockRollback: false };
+  if (MAIN_ADMIN_USERS.has(key) || key === "admin" || key === "main_admin") {
+    return { hasAccount: true, valid: true, expired: false, isMainAdmin: true, validUntil: "", createdAt: "", daysLeft: 0, clockRollback: false };
+  }
+  const config = await getConfig();
+  const registry = await loadAccessRegistry(config);
+  const account = (registry.subAdmins || []).find(
+    (item) => String(item.windowsUsername || "").trim().toLowerCase() === key
+      || String(item.employeeId || "").trim().toLowerCase() === key,
+  );
+  if (!account) return { hasAccount: false, valid: true, guest: true, expired: false, validUntil: "", createdAt: "", daysLeft: 0, clockRollback: false };
+  const status = validityForAccount(account);
+  status.employeeId = String(account.employeeId || "");
+  status.fullName = String(account.fullName || "");
+  status.role = normalizeRole(account.role);
+  return status;
+}
+
+// Returns null when file operations are allowed, or a { ok:false,
+// accountExpired:true, message } result when the signed-in user's
+// account validity has ended. Guests are not validity-gated (they are
+// trial-gated); the Main Admin never expires.
+async function validityGate(event) {
+  const session = sessionForEvent(event);
+  if (!session) return null;
+  const status = await getAccountValidityFor(session.username);
+  if (status.valid) return null;
+  return {
+    ok: false,
+    accountExpired: true,
+    message: "Your Account Validity Has Expired! Please request the Admin to renew your account access.",
+  };
+}
+
+// Synchronous validity check for the will-download backstop (the
+// download event cannot wait for the network). It reads the local
+// account cache — the latest registry this computer has seen — so a
+// renewal made on another computer reaches it on the next sync.
+function validityGateSync() {
+  if (!currentActiveSession) return null;
+  const username = String(currentActiveSession.username || "").trim().toLowerCase();
+  if (!username || MAIN_ADMIN_USERS.has(username) || username === "admin" || username === "main_admin") return null;
+  try {
+    const registry = JSON.parse(fs.readFileSync(userFile("access-cache.json"), "utf8"));
+    const account = (registry.subAdmins || []).find(
+      (item) => String(item.windowsUsername || "").trim().toLowerCase() === username
+        || String(item.employeeId || "").trim().toLowerCase() === username,
+    );
+    if (!account) return null;
+    const status = validityForAccount(account);
+    if (status.valid) return null;
+    return {
+      ok: false,
+      accountExpired: true,
+      message: "Your Account Validity Has Expired! Please request the Admin to renew your account access.",
+    };
+  } catch {
+    return null;
+  }
+}
+
+const RECOVERY_REQUESTS_FILE = "account-recovery-requests.json";
+const VALIDITY_AUDIT_FILE = "account-validity-audit.json";
+const VALIDITY_AUDIT_MAX = 500;
+
+async function loadRecoveryRequests(config) {
+  const raw = await loadSharedJson(config, RECOVERY_REQUESTS_FILE, []);
+  return Array.isArray(raw) ? raw : [];
+}
+async function saveRecoveryRequests(config, list) {
+  return saveSharedJson(config, RECOVERY_REQUESTS_FILE, list);
+}
+async function loadValidityAudit(config) {
+  const raw = await loadSharedJson(config, VALIDITY_AUDIT_FILE, []);
+  return Array.isArray(raw) ? raw : [];
+}
+async function appendValidityAudit(config, entry) {
+  const list = await loadValidityAudit(config);
+  list.unshift(entry);
+  const trimmed = list.slice(0, VALIDITY_AUDIT_MAX);
+  await saveSharedJson(config, VALIDITY_AUDIT_FILE, trimmed);
+  return trimmed;
+}
+
+// Renew one account. `spec` is { months } (1/2/3/6/12) or { customDate }
+// (a future date). The new expiry is counted from the later of the
+// current expiry and now, so renewing early does not waste the
+// remaining days. Returns the updated account + the previous expiry.
+async function renewAccountValidity(config, registry, account, spec, by) {
+  const now = new Date();
+  const currentMs = Date.parse(String(account.validUntil || ""));
+  const baseMs = Number.isFinite(currentMs) ? Math.max(currentMs, now.getTime()) : now.getTime();
+  let newUntil;
+  if (spec.customDate) {
+    const custom = new Date(spec.customDate);
+    if (isNaN(custom.getTime()) || custom.getTime() <= now.getTime()) {
+      return { ok: false, message: "Choose a custom expiry date in the future." };
+    }
+    newUntil = custom;
+  } else {
+    const months = VALIDITY_MONTH_OPTIONS.includes(Number(spec.months)) ? Number(spec.months) : VALIDITY_DEFAULT_MONTHS;
+    newUntil = addMonthsToDate(new Date(baseMs), months);
+  }
+  const previousValidUntil = String(account.validUntil || "");
+  account.validUntil = newUntil.toISOString();
+  account.updatedAt = now.toISOString();
+  account.updatedBy = by || "";
+  await saveAccessRegistry(config, registry);
+  return { ok: true, previousValidUntil, newValidUntil: account.validUntil };
+}
+
+// ---------------------------------------------------------------------------
+// Support Chat (users <-> Main Admin)
+// ---------------------------------------------------------------------------
+// Conversations live on the office network (support-messages.json) with
+// a local cache fallback. A user only ever sees their own conversation;
+// the Main Admin sees every conversation in the Support Messages inbox.
+// Messages store the user id + name, date/time, category and module.
+const SUPPORT_FILE = "support-messages.json";
+const SUPPORT_STATUSES = ["new", "pending", "in_progress", "resolved"];
+const SUPPORT_CATEGORIES = ["Problem", "Bug Report", "Suggestion", "New Feature"];
+
+function emptySupportStore() { return { version: 1, conversations: [] }; }
+async function loadSupportMessages(config) {
+  const raw = await loadSharedJson(config, SUPPORT_FILE, emptySupportStore());
+  if (raw && Array.isArray(raw.conversations)) return raw;
+  return emptySupportStore();
+}
+async function saveSupportMessages(config, store) {
+  store.version = 1;
+  return saveSharedJson(config, SUPPORT_FILE, store);
+}
+function supportCallerIdentity(access) {
+  // Signed-in users are identified by their account; guests by this
+  // computer (the same machine id the trial uses), so a guest's
+  // conversation stays private to this computer.
+  if (access && access.role !== "guest" && (access.employeeId || access.username)) {
+    return {
+      userId: String(access.employeeId || access.username).toLowerCase(),
+      userName: String(access.fullName || access.username || ""),
+      role: access.role,
+    };
+  }
+  return { userId: `guest:${trialMachineId()}`, userName: "Guest", role: "guest" };
+}
+function findOpenConversation(store, userId) {
+  return store.conversations.find((c) => c.userId === userId && c.status !== "resolved");
+}
+
+// AI-assisted replies: a local knowledge base of verified ZBOM answers.
+// This is NOT a live language model — the desktop app is offline and has
+// no AI service — so suggestions come only from these checked answers.
+// The AI never sends anything itself and never changes accounts,
+// permissions, settings or data: it only proposes reply text for the
+// Admin to review, edit or ignore. When no entry matches, it escalates
+// to the Admin instead of guessing.
+const SUPPORT_KB = [
+  {
+    id: "signin", category: "Problem", title: "Sign-in / password",
+    keywords: ["sign in", "signin", "sign-in", "log in", "login", "password", "incorrect username", "cannot sign", "can't sign", "forgot password", "wrong password"],
+    reply: "If your sign-in is not working, please check that you are using your Employee ID and the password the Admin set for you. If you forgot your password, please contact the Main Admin (Zakaria Alam Mithu) — only the Admin can reset a password. Please never share your password with anyone.",
+  },
+  {
+    id: "excel-blank", category: "Bug Report", title: "Excel file opens blank / repair message",
+    keywords: ["excel", "blank", "corrupt", "repair", "empty file", "cannot open", "won't open", "file is empty", "opens blank"],
+    reply: "If a downloaded Excel file opens blank or Excel shows a repair message, please update to the newest ZBOM version (the download in the latest message from the Admin) and download the file again. If it still does not open, please tell Support the exact file name and the message Excel shows.",
+  },
+  {
+    id: "download", category: "Problem", title: "Download File button / download fails",
+    keywords: ["download", "download file", "download button", "no download", "can't download", "failed download", "download failed"],
+    reply: "After a file is imported and processed, the Download File button appears above the result table. If you do not see it, please update to the newest ZBOM version and try the import again. If the download itself fails, the button stays available — please try once more and tell Support the exact message you see.",
+  },
+  {
+    id: "trial", category: "Problem", title: "Free trial ended",
+    keywords: ["trial", "free trial", "7 day", "7-day", "trial expired", "trial ended"],
+    reply: "The 7-day free trial starts on the first launch on a computer and is for users without an account. When it ends, please create a free account from the trial message — signing in restores full access. If you already have an account, please sign in instead.",
+  },
+  {
+    id: "network", category: "Problem", title: "Office network not available",
+    keywords: ["network", "lan", "office network", "offline", "connection", "not available", "cannot connect", "no network", "network connection"],
+    reply: "ZBOM needs the office network for shared files and accounts. Please check that this computer is connected to the office network and try again. If the problem continues, please contact Zakaria Alam Mithu from Support.",
+  },
+  {
+    id: "validity", category: "Problem", title: "Account validity expired",
+    keywords: ["account expired", "validity", "expired account", "renew", "renewal", "recovery", "account validity", "validity expired"],
+    reply: "When an account's validity ends, you can still sign in, but file work stays blocked until the Admin renews the account. Please use the Request Account Recovery button on the expiry message — the Admin will renew your account and your access will return on your next sign-in.",
+  },
+  {
+    id: "upload", category: "Problem", title: "Upload / import does nothing",
+    keywords: ["upload", "import", "nothing happens", "not working", "won't upload", "stuck", "does nothing"],
+    reply: "If an upload seems to do nothing, please check that the file is an Excel (.xlsx) file in the expected format and try again. If it still does not respond, please tell Support the file name and which module you were using (for example ZKNG, LSMW BOM or Routing).",
+  },
+  {
+    id: "production", category: "Problem", title: "Production Calculation result looks wrong",
+    keywords: ["production", "calculation", "wrong number", "wrong result", "formula", "production calculation"],
+    reply: "Production is calculated from the machine settings you enter (Count, Stitch Length, Dia, Gauge, Feeders, RPM). Please double-check those values against the machine — a wrong Dia or Gauge changes the result. If the numbers still look wrong, please tell Support the fabric, the machine values, and the result you expected.",
+  },
+  {
+    id: "upload-modules", category: "Problem", title: "ZKNG / LSMW / Routing / Characteristics ready file",
+    keywords: ["routing", "lsmw", "zkng", "characteristics", "ready file", "bom", "skipped"],
+    reply: "For ZKNG, LSMW BOM, Routing or Characteristics, please upload the Material Code workbook and wait for the Ready file. If a row is skipped, the list on screen shows which rows need attention. If every row is skipped, please tell Support which file you uploaded.",
+  },
+  {
+    id: "feature", category: "Suggestion", title: "New feature request",
+    keywords: ["feature", "suggestion", "new feature", "request", "idea", "improve", "add"],
+    reply: "Thank you for the suggestion. The Admin will review new feature requests and decide whether to add them. If you can, please describe what the feature should do and which module it belongs to.",
+  },
+];
+function supportSuggestionFor(text, category) {
+  const lower = String(text || "").toLowerCase();
+  let best = null;
+  let bestScore = 0;
+  for (const entry of SUPPORT_KB) {
+    let hits = 0;
+    for (const keyword of entry.keywords) {
+      if (keyword && lower.includes(keyword.toLowerCase())) hits += 1;
+    }
+    if (hits === 0) continue;
+    let score = hits;
+    if (category && entry.category && entry.category === category) score += 1;
+    if (score > bestScore) { bestScore = score; best = { entry, hits }; }
+  }
+  if (!best) return { matched: false, escalate: true, suggestion: null, reason: "No matching known issue — please reply yourself." };
+  return {
+    matched: true,
+    escalate: false,
+    suggestion: best.entry.reply,
+    topic: best.entry.title,
+    confidence: best.hits >= 2 ? "high" : "low",
+    note: "Suggestion only — review it before sending. It never changes accounts, permissions or settings.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Genuine User Reviews (4 or 5 stars only, one active review per user)
+// ---------------------------------------------------------------------------
+// Reviews live on the office network (reviews.json) with a local cache
+// fallback. Only signed-in users can submit; a user has one active
+// review and updates it instead of adding another. No review is ever
+// created by the system — every review here was typed by a user. The
+// Admin can hide, unhide or remove a review; every moderation action is
+// kept in that review's history.
+const REVIEWS_FILE = "reviews.json";
+const REVIEW_STARS = [4, 5];
+
+function emptyReviewStore() { return { version: 1, reviews: [] }; }
+async function loadReviews(config) {
+  const raw = await loadSharedJson(config, REVIEWS_FILE, emptyReviewStore());
+  if (raw && Array.isArray(raw.reviews)) return raw;
+  return emptyReviewStore();
+}
+async function saveReviews(config, store) {
+  store.version = 1;
+  return saveSharedJson(config, REVIEWS_FILE, store);
+}
+function reviewSummary(reviews) {
+  const visible = reviews.filter((r) => !r.hidden && !r.removed);
+  const four = visible.filter((r) => r.stars === 4).length;
+  const five = visible.filter((r) => r.stars === 5).length;
+  const total = visible.length;
+  const average = total ? Number(((four * 4 + five * 5) / total).toFixed(1)) : 0;
+  return { four, five, total, average };
+}
+
 function formatDDMMYYYY(val) {
   if (!val && val !== 0) return "";
   if (val instanceof Date) {
@@ -615,7 +995,7 @@ function normalizedUsername() {
 }
 
 function accessFile(sharePath) {
-  return path.join(sharePath, "ZBOM-Admin", "access.json");
+  return sharePathUsable(sharePath) ? path.join(sharePath, "ZBOM-Admin", "access.json") : null;
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -716,6 +1096,20 @@ async function loadAccessRegistry(config, force = false) {
     });
     registry.userIdLoginSchemaVersion = 1;
   }
+  // Account validity (2026-11-28): every account gets a validUntil.
+  // Accounts created before this feature have none, so they get 3 months
+  // from the upgrade — nobody is locked out by the upgrade itself. The
+  // migrated date is saved to the local cache with the registry below,
+  // and to the network copy the next time any account is saved.
+  if (!registry.validitySchemaVersion || registry.validitySchemaVersion < 1) {
+    const migrationUntil = addMonthsToDate(new Date(), VALIDITY_DEFAULT_MONTHS).toISOString();
+    (registry.subAdmins || []).forEach((admin) => {
+      if (!admin.validUntil || !Number.isFinite(Date.parse(String(admin.validUntil)))) {
+        admin.validUntil = migrationUntil;
+      }
+    });
+    registry.validitySchemaVersion = 1;
+  }
 
   cachedAccessRegistry = registry;
   cachedAccessRegistryTime = now;
@@ -739,12 +1133,12 @@ async function saveAccessRegistry(config, registry) {
     new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
   ]);
   if (!shareReachable) {
-    throw new Error(`The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`);
+    throw new Error(`The office network is not reachable. Please connect to the office network and try again.`);
   }
   try {
     await writeJsonAtomic(accessFile(config.sharePath), registry);
   } catch (error) {
-    throw new Error(`Could not save the account: the ZBOM-Admin folder could not be created on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`);
+    throw new Error(`Could not save the account: the office network folder could not be created. Please check that this computer has write permission on the office network.`);
   }
   await writeJsonAtomic(userFile("access-cache.json"), registry);
   cachedAccessRegistry = registry;
@@ -804,12 +1198,12 @@ async function saveModuleAccess(config, rules) {
     new Promise((resolve) => setTimeout(() => resolve(false), 1500)),
   ]);
   if (!shareReachable) {
-    throw new Error(`The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`);
+    throw new Error(`The office network is not reachable. Please connect to the office network and try again.`);
   }
   try {
     await writeJsonAtomic(moduleAccessFile(config.sharePath), rules);
   } catch (error) {
-    throw new Error(`Could not save module access: the ZBOM-Admin folder could not be written on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`);
+    throw new Error(`Could not save module access: the office network folder could not be written. Please check that this computer has write permission on the office network.`);
   }
   await writeJsonAtomic(userFile("module-access-cache.json"), rules);
   cachedModuleAccess = rules;
@@ -1099,6 +1493,9 @@ async function saveSubAdmin(record, access) {
     updatedAt: new Date().toISOString(),
     updatedBy: access.username,
     createdAt: existing ? (existing.createdAt || "") : new Date().toISOString(),
+    // A new account is valid for 3 months; editing an existing account
+    // never resets its validity — only a renewal does.
+    validUntil: existing?.validUntil || addMonthsToDate(new Date(), VALIDITY_DEFAULT_MONTHS).toISOString(),
   };
   if (existingIndex >= 0) subAdmins[existingIndex] = account;
   else subAdmins.push(account);
@@ -1149,6 +1546,8 @@ async function registerUserAccount(record) {
     requestedDepartment: Boolean(record.requestSubAdmin) ? department : "",
     requestStatus: record.requestSubAdmin ? "pending" : "none",
     createdAt: now,
+    // A new account is valid for 3 months from creation.
+    validUntil: addMonthsToDate(new Date(now), VALIDITY_DEFAULT_MONTHS).toISOString(),
     updatedAt: now,
     updatedBy: employeeId,
   };
@@ -1166,7 +1565,7 @@ async function registerUserAccount(record) {
   if (!shareReachable) {
     return {
       ok: false,
-      message: `The LAN share (${config.sharePath}) is not reachable. Please connect to the office LAN and try again.`,
+      message: `The office network is not reachable. Please connect to the office network and try again.`,
     };
   }
   try {
@@ -1178,7 +1577,7 @@ async function registerUserAccount(record) {
     // so say plainly what is blocked and what to check.
     return {
       ok: false,
-      message: `Could not save the account: the ZBOM-Admin folder could not be created on the LAN share (${config.sharePath}). Please check that this computer has write permission on the share.`,
+      message: `Could not save the account: the office network folder could not be created. Please check that this computer has write permission on the office network.`,
     };
   }
   return {
@@ -2019,7 +2418,7 @@ async function updateFromShare(force = false) {
     return {
       ok: false,
       offline: true,
-      message: `Shared folder is not available: ${config.sharePath}`,
+      message: `Shared folder is not available. Please connect to the office network and try again.`,
       error: error.message,
       snapshot: previous,
     };
@@ -2270,6 +2669,14 @@ function createWindow() {
       mainWindow.webContents.send("zbom:download-blocked-trial", { filename: item.getFilename() || "download" });
       return;
     }
+    // Validity backstop: a signed-in user whose account expired cannot
+    // download anything. The renderer checks first; this stops a
+    // download that slips past the UI check.
+    if (isSignedInNow() && validityGateSync()) {
+      _event.preventDefault();
+      mainWindow.webContents.send("zbom:download-blocked-validity", { filename: item.getFilename() || "download" });
+      return;
+    }
     try {
       const downloadsDir = app.getPath("downloads");
       const filename = item.getFilename() || "download";
@@ -2393,6 +2800,409 @@ app.whenReady().then(async () => {
     const access = await accessForEvent(event);
     if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can manage the free trial." };
     return { ok: true, trial: extendTrialRecord(days) };
+  });
+  // Account Validity: status for this user, recovery requests, Main-Admin renewal.
+  ipcMain.handle("erp:get-my-validity", async (event) => {
+    const session = sessionForEvent(event, false);
+    if (!session) return { hasAccount: false, valid: true, guest: true, expired: false, validUntil: "", createdAt: "", daysLeft: 0, clockRollback: false };
+    return getAccountValidityFor(session.username);
+  });
+  ipcMain.handle("erp:get-network-status", async () => {
+    const config = await getConfig();
+    const reachable = await isShareReachable(config);
+    return { reachable, checkedAt: new Date().toISOString() };
+  });
+  ipcMain.handle("erp:request-account-recovery", async (event) => {
+    const session = sessionForEvent(event, false);
+    if (!session) return { ok: false, message: "Sign in before requesting account recovery." };
+    const status = await getAccountValidityFor(session.username);
+    if (!status.hasAccount) return { ok: false, message: "No account was found for this user." };
+    if (status.isMainAdmin) return { ok: false, message: "The Main Admin account never expires." };
+    if (status.valid) return { ok: false, message: "Your account is still valid — no recovery is needed." };
+    const config = await getConfig();
+    const requests = await loadRecoveryRequests(config);
+    const key = String(status.employeeId || session.username).toLowerCase();
+    const existing = requests.find((r) => String(r.employeeId || "").toLowerCase() === key && r.status === "pending");
+    if (existing) return { ok: true, alreadyPending: true, request: existing, message: "Your recovery request is already waiting for the Admin." };
+    const request = {
+      id: `rec-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+      employeeId: key,
+      fullName: status.fullName || "",
+      previousValidUntil: status.validUntil || "",
+      requestedAt: new Date().toISOString(),
+      status: "pending",
+      resolvedAt: "",
+      resolvedBy: "",
+      newValidUntil: "",
+      note: "",
+    };
+    requests.unshift(request);
+    await saveRecoveryRequests(config, requests);
+    await appendValidityAudit(config, {
+      at: request.requestedAt, by: key, byName: request.fullName,
+      employeeId: key, action: "recovery_requested",
+      previousValidUntil: request.previousValidUntil, newValidUntil: "",
+      detail: "Account recovery requested.",
+    });
+    return { ok: true, request, message: "Your recovery request was sent to the Admin. Your access will return after the Admin renews your account." };
+  });
+  ipcMain.handle("erp:get-account-validity", async (event) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can manage account validity." };
+    const config = await getConfig();
+    const registry = await loadAccessRegistry(config);
+    const users = (registry.subAdmins || []).map((account) => {
+      const status = validityForAccount(account);
+      return {
+        employeeId: String(account.employeeId || ""),
+        fullName: String(account.fullName || ""),
+        department: String(account.department || ""),
+        designation: String(account.designation || ""),
+        role: normalizeRole(account.role),
+        active: account.active !== false,
+        createdAt: String(account.createdAt || ""),
+        validUntil: status.validUntil,
+        expired: status.expired,
+        daysLeft: status.daysLeft,
+        clockRollback: status.clockRollback,
+      };
+    });
+    return {
+      ok: true,
+      users,
+      requests: await loadRecoveryRequests(config),
+      audit: await loadValidityAudit(config),
+    };
+  });
+  ipcMain.handle("erp:renew-account", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can renew accounts." };
+    const employeeId = String(payload?.employeeId || "").trim().toLowerCase();
+    if (!employeeId) return { ok: false, message: "Choose a user first." };
+    const config = await getConfig();
+    const registry = await loadAccessRegistry(config);
+    const account = (registry.subAdmins || []).find(
+      (item) => String(item.employeeId || "").trim().toLowerCase() === employeeId
+        || String(item.windowsUsername || "").trim().toLowerCase() === employeeId,
+    );
+    if (!account) return { ok: false, message: "No account was found for this user." };
+    let renewed;
+    try {
+      renewed = await renewAccountValidity(config, registry, account, payload || {}, access.username);
+    } catch (error) {
+      return { ok: false, message: error.message || String(error) };
+    }
+    if (!renewed.ok) return renewed;
+    // A renewal also approves any pending recovery request for this user.
+    const requests = await loadRecoveryRequests(config);
+    let resolvedRequest = null;
+    for (const req of requests) {
+      if (String(req.employeeId || "").toLowerCase() === employeeId && req.status === "pending") {
+        req.status = "approved";
+        req.resolvedAt = new Date().toISOString();
+        req.resolvedBy = access.username || "31001625";
+        req.newValidUntil = renewed.newValidUntil;
+        resolvedRequest = req;
+      }
+    }
+    if (resolvedRequest) await saveRecoveryRequests(config, requests);
+    await appendValidityAudit(config, {
+      at: new Date().toISOString(), by: access.username || "31001625", byName: access.fullName || "",
+      employeeId, action: "renewed",
+      previousValidUntil: renewed.previousValidUntil, newValidUntil: renewed.newValidUntil,
+      detail: `Renewed by the Main Admin${resolvedRequest ? " (recovery request approved)" : ""}.`,
+    });
+    return { ok: true, previousValidUntil: renewed.previousValidUntil, newValidUntil: renewed.newValidUntil, message: `${account.fullName || employeeId}'s account is valid until ${formatDDMMYYYY(renewed.newValidUntil)}.` };
+  });
+  ipcMain.handle("erp:respond-recovery-request", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can answer recovery requests." };
+    const requestId = String(payload?.requestId || "");
+    const approved = payload?.approved === true;
+    const config = await getConfig();
+    const requests = await loadRecoveryRequests(config);
+    const request = requests.find((r) => r.id === requestId);
+    if (!request || request.status !== "pending") return { ok: false, message: "No pending recovery request was found." };
+    if (!approved) {
+      request.status = "rejected";
+      request.resolvedAt = new Date().toISOString();
+      request.resolvedBy = access.username || "31001625";
+      request.note = String(payload?.note || "");
+      await saveRecoveryRequests(config, requests);
+      await appendValidityAudit(config, {
+        at: request.resolvedAt, by: access.username || "31001625", byName: access.fullName || "",
+        employeeId: request.employeeId, action: "recovery_rejected",
+        previousValidUntil: request.previousValidUntil, newValidUntil: "",
+        detail: "Recovery request rejected by the Main Admin.",
+      });
+      return { ok: true, message: "The recovery request was rejected." };
+    }
+    // Approving a request renews the account with the chosen period.
+    const registry = await loadAccessRegistry(config);
+    const account = (registry.subAdmins || []).find(
+      (item) => String(item.employeeId || "").trim().toLowerCase() === String(request.employeeId || "").toLowerCase()
+        || String(item.windowsUsername || "").trim().toLowerCase() === String(request.employeeId || "").toLowerCase(),
+    );
+    if (!account) return { ok: false, message: "No account was found for this user." };
+    let renewed;
+    try {
+      renewed = await renewAccountValidity(config, registry, account, payload || {}, access.username);
+    } catch (error) {
+      return { ok: false, message: error.message || String(error) };
+    }
+    if (!renewed.ok) return renewed;
+    request.status = "approved";
+    request.resolvedAt = new Date().toISOString();
+    request.resolvedBy = access.username || "31001625";
+    request.newValidUntil = renewed.newValidUntil;
+    await saveRecoveryRequests(config, requests);
+    await appendValidityAudit(config, {
+      at: request.resolvedAt, by: access.username || "31001625", byName: access.fullName || "",
+      employeeId: request.employeeId, action: "recovery_approved",
+      previousValidUntil: renewed.previousValidUntil, newValidUntil: renewed.newValidUntil,
+      detail: "Recovery request approved — account renewed by the Main Admin.",
+    });
+    return { ok: true, newValidUntil: renewed.newValidUntil, message: `${account.fullName || request.employeeId}'s account is valid until ${formatDDMMYYYY(renewed.newValidUntil)}.` };
+  });
+  // Support Chat: the user's own conversation, and the Admin inbox.
+  ipcMain.handle("erp:send-support-message", async (event, payload) => {
+    const access = await accessForEvent(event);
+    const identity = supportCallerIdentity(access);
+    const text = String(payload?.text || "").trim();
+    if (!text) return { ok: false, message: "Write a message first." };
+    if (text.length > 2000) return { ok: false, message: "Please keep the message under 2000 characters." };
+    const category = SUPPORT_CATEGORIES.includes(payload?.category) ? payload.category : "Problem";
+    const module = String(payload?.module || "").trim();
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    let conversation = findOpenConversation(store, identity.userId);
+    if (!conversation) {
+      conversation = {
+        id: `sup-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+        userId: identity.userId,
+        userName: identity.userName,
+        userRole: identity.role,
+        status: "new",
+        category,
+        module,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        unreadAdmin: 0,
+        unreadUser: 0,
+        messages: [],
+      };
+      store.conversations.unshift(conversation);
+    }
+    conversation.messages.push({
+      id: `msg-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+      from: "user",
+      authorId: identity.userId,
+      authorName: identity.userName,
+      text,
+      category,
+      module,
+      at: new Date().toISOString(),
+      readByAdmin: false,
+    });
+    conversation.category = category;
+    if (module) conversation.module = module;
+    conversation.updatedAt = new Date().toISOString();
+    conversation.unreadAdmin = (conversation.unreadAdmin || 0) + 1;
+    if (conversation.status === "resolved") conversation.status = "pending";
+    await saveSupportMessages(config, store);
+    return { ok: true, conversation, message: "Your message was sent to Support." };
+  });
+  ipcMain.handle("erp:get-support-conversation", async (event, payload) => {
+    const access = await accessForEvent(event);
+    const identity = supportCallerIdentity(access);
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    const conversation = store.conversations.find((c) => c.userId === identity.userId)
+      || store.conversations.filter((c) => c.userId === identity.userId).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+      || null;
+    if (!conversation) return { ok: true, conversation: null, unreadUser: 0 };
+    // Opening the chat marks the Admin's replies as read for this user.
+    // A plain status check (the unread badge poll) must NOT do that, or
+    // the badge would clear itself before the user ever opens the chat.
+    if (!payload?.markRead) return { ok: true, conversation, unreadUser: conversation.unreadUser || 0 };
+    let changed = false;
+    for (const m of conversation.messages) {
+      if (m.from === "admin" && !m.readByUser) { m.readByUser = true; changed = true; }
+    }
+    if (changed) {
+      conversation.unreadUser = 0;
+      await saveSupportMessages(config, store);
+    }
+    return { ok: true, conversation, unreadUser: conversation.unreadUser || 0 };
+  });
+  ipcMain.handle("erp:get-support-inbox", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can read support messages." };
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    const selectedId = String(payload?.conversationId || "");
+    const conversations = [...store.conversations].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    let selected = selectedId ? conversations.find((c) => c.id === selectedId) || null : null;
+    if (selected) {
+      // Opening a conversation marks the user's messages as read for the Admin.
+      let changed = false;
+      for (const m of selected.messages) {
+        if (m.from === "user" && !m.readByAdmin) { m.readByAdmin = true; changed = true; }
+      }
+      if (changed) {
+        selected.unreadAdmin = 0;
+        await saveSupportMessages(config, store);
+      }
+    }
+    return {
+      ok: true,
+      conversations: conversations.map((c) => ({
+        id: c.id, userId: c.userId, userName: c.userName, userRole: c.userRole,
+        status: c.status, category: c.category, module: c.module,
+        createdAt: c.createdAt, updatedAt: c.updatedAt,
+        unreadAdmin: c.unreadAdmin || 0, messageCount: c.messages.length,
+        lastMessage: c.messages.length ? c.messages[c.messages.length - 1].text : "",
+      })),
+      selected,
+      totalUnread: conversations.reduce((sum, c) => sum + (c.unreadAdmin || 0), 0),
+    };
+  });
+  ipcMain.handle("erp:reply-support-message", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can reply to support messages." };
+    const conversationId = String(payload?.conversationId || "");
+    const text = String(payload?.text || "").trim();
+    if (!text) return { ok: false, message: "Write a reply first." };
+    if (text.length > 2000) return { ok: false, message: "Please keep the reply under 2000 characters." };
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    const conversation = store.conversations.find((c) => c.id === conversationId);
+    if (!conversation) return { ok: false, message: "No support conversation was found." };
+    conversation.messages.push({
+      id: `msg-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+      from: "admin",
+      authorId: String(access.employeeId || access.username || "31001625").toLowerCase(),
+      authorName: access.fullName || "Admin",
+      text,
+      category: conversation.category,
+      module: conversation.module,
+      at: new Date().toISOString(),
+      readByUser: false,
+    });
+    conversation.updatedAt = new Date().toISOString();
+    conversation.unreadUser = (conversation.unreadUser || 0) + 1;
+    if (conversation.status === "new" || conversation.status === "resolved") conversation.status = "in_progress";
+    await saveSupportMessages(config, store);
+    return { ok: true, conversation, message: "Your reply was sent." };
+  });
+  ipcMain.handle("erp:set-support-status", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can change a support status." };
+    const conversationId = String(payload?.conversationId || "");
+    const status = String(payload?.status || "");
+    if (!SUPPORT_STATUSES.includes(status)) return { ok: false, message: "Choose a valid status." };
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    const conversation = store.conversations.find((c) => c.id === conversationId);
+    if (!conversation) return { ok: false, message: "No support conversation was found." };
+    conversation.status = status;
+    conversation.updatedAt = new Date().toISOString();
+    await saveSupportMessages(config, store);
+    return { ok: true, conversation };
+  });
+  ipcMain.handle("erp:get-support-suggestion", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can use suggested replies." };
+    const conversationId = String(payload?.conversationId || "");
+    const config = await getConfig();
+    const store = await loadSupportMessages(config);
+    const conversation = store.conversations.find((c) => c.id === conversationId);
+    if (!conversation) return { ok: false, message: "No support conversation was found." };
+    const lastUserMessage = [...conversation.messages].reverse().find((m) => m.from === "user");
+    if (!lastUserMessage) return { ok: true, matched: false, escalate: true, suggestion: null, reason: "The user has not written anything yet." };
+    return { ok: true, ...supportSuggestionFor(lastUserMessage.text, lastUserMessage.category || conversation.category) };
+  });
+  // Genuine User Reviews: submit/update, list, and Admin moderation.
+  ipcMain.handle("erp:submit-review", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (!access || access.role === "guest" || !access.employeeId) {
+      return { ok: false, message: "Sign in before leaving a review." };
+    }
+    const stars = Number(payload?.stars);
+    if (!REVIEW_STARS.includes(stars)) return { ok: false, message: "Please choose 4 stars or 5 stars." };
+    const comment = String(payload?.comment || "").trim();
+    if (!comment) return { ok: false, message: "Write a short comment about your experience." };
+    if (comment.length > 1000) return { ok: false, message: "Please keep the comment under 1000 characters." };
+    const userId = String(access.employeeId).toLowerCase();
+    const config = await getConfig();
+    const store = await loadReviews(config);
+    const now = new Date().toISOString();
+    let review = store.reviews.find((r) => String(r.userId || "").toLowerCase() === userId && !r.removed);
+    if (review) {
+      // One active review per user: submitting again updates it.
+      review.stars = stars;
+      review.comment = comment;
+      review.updatedAt = now;
+      review.history = review.history || [];
+      review.history.push({ at: now, by: userId, action: "updated", note: "User updated their review." });
+    } else {
+      review = {
+        id: `rev-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+        userId,
+        userName: access.fullName || access.username || "",
+        stars,
+        comment,
+        createdAt: now,
+        updatedAt: now,
+        hidden: false,
+        removed: false,
+        history: [{ at: now, by: userId, action: "created", note: "Review submitted by the user." }],
+      };
+      store.reviews.unshift(review);
+    }
+    await saveReviews(config, store);
+    return { ok: true, review, summary: reviewSummary(store.reviews), message: "Thank you — your review was saved." };
+  });
+  ipcMain.handle("erp:get-reviews", async (event) => {
+    const access = await accessForEvent(event);
+    const isMainAdmin = access.role === "main_admin";
+    const config = await getConfig();
+    const store = await loadReviews(config);
+    const userId = String(access.employeeId || "").toLowerCase();
+    const visible = store.reviews.filter((r) => !r.hidden && !r.removed);
+    const own = userId ? store.reviews.find((r) => String(r.userId || "").toLowerCase() === userId && !r.removed) || null : null;
+    return {
+      ok: true,
+      reviews: visible,
+      all: isMainAdmin ? store.reviews : undefined,
+      own,
+      summary: reviewSummary(store.reviews),
+      signedIn: access.role !== "guest",
+    };
+  });
+  ipcMain.handle("erp:moderate-review", async (event, payload) => {
+    const access = await accessForEvent(event);
+    if (access.role !== "main_admin") return { ok: false, message: "Only the Main Admin can moderate reviews." };
+    const reviewId = String(payload?.reviewId || "");
+    const action = String(payload?.action || "");
+    if (!["hide", "unhide", "remove"].includes(action)) return { ok: false, message: "Choose hide, unhide or remove." };
+    const config = await getConfig();
+    const store = await loadReviews(config);
+    const review = store.reviews.find((r) => r.id === reviewId);
+    if (!review) return { ok: false, message: "No review was found." };
+    const now = new Date().toISOString();
+    if (action === "hide") { review.hidden = true; review.updatedAt = now; }
+    if (action === "unhide") { review.hidden = false; review.updatedAt = now; }
+    if (action === "remove") { review.removed = true; review.updatedAt = now; }
+    review.history = review.history || [];
+    review.history.push({
+      at: now,
+      by: String(access.employeeId || access.username || "31001625").toLowerCase(),
+      action: action === "remove" ? "removed" : action === "hide" ? "hidden" : "unhidden",
+      note: `Review ${action === "remove" ? "removed" : action === "hide" ? "hidden" : "unhidden"} by the Main Admin.`,
+    });
+    await saveReviews(config, store);
+    return { ok: true, review, summary: reviewSummary(store.reviews), message: `The review was ${action === "remove" ? "removed" : action === "hide" ? "hidden" : "shown again"}.` };
   });
 function rolePermissionFlags(role) {
   const perms = ROLE_PERMISSIONS[normalizeRole(role)] || new Set();
@@ -2583,6 +3393,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:export", async (event, { rows, format, defaultName, tableType, diaTotals, knittingBalance }) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const access = await accessForEvent(event);
     if (!adminAuthorized(event, access)) {
       return { ok: false, message: "Create an account or sign in before downloading files." };
@@ -2704,6 +3516,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-characteristics-master", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -2730,6 +3544,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:import-characteristics-material", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2778,6 +3594,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:download-characteristics-ready", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "characteristicsUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -2851,6 +3669,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-routing-master", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -2877,6 +3697,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:import-routing-material", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3015,6 +3837,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:download-routing-ready", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "routingUploadFormat");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3115,7 +3939,11 @@ function summarizeUserActivity(events) {
     }).catch(() => {});
 
 
-    return { ok: true, access: result.access, message: `Signed in as ${result.access.fullName}.` };
+    // An expired account still signs in (the account is not deleted or
+    // disabled), but cannot do file work until the Main Admin renews it.
+    // The renderer shows the expiry notice from this validity status.
+    const validity = await getAccountValidityFor(result.access.username);
+    return { ok: true, access: result.access, validity, message: `Signed in as ${result.access.fullName}.` };
   });
   ipcMain.handle("erp:register-account", async (_event, record) => registerUserAccount(record));
   ipcMain.handle("erp:logout", async (event) => {
@@ -3198,6 +4026,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-master-section", async (event, section) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const permission = await requireMasterControl(event);
     if (!permission.ok) return permission;
     return uploadMasterSection(section);
@@ -3205,6 +4035,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-department-file", async (event, payload) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const authorization = await requirePermission(event, "upload");
     if (!authorization.ok) return authorization;
     const department = typeof payload === "string" ? payload : payload?.department;
@@ -3223,6 +4055,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:download-resource", async (event, resourceId) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const access = await accessForEvent(event);
     return downloadBundledResource(resourceId);
   });
@@ -3255,6 +4089,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-zkng-master", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -3279,6 +4115,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:import-zkng-material", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3330,6 +4168,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:download-zkng-ready", async (event, includeRouting = false) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "zkngMaterialUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3391,6 +4231,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:upload-lsmw-bom-master", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const access = await accessForEvent(event);
@@ -3415,6 +4257,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:import-lsmw-bom-material", async (event) => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);
@@ -3576,6 +4420,8 @@ function summarizeUserActivity(events) {
   ipcMain.handle("erp:download-lsmw-bom-ready", async (event, fileType = "all") => {
     const trialBlocked = trialGate();
     if (trialBlocked) return trialBlocked;
+    const validityBlocked = await validityGate(event);
+    if (validityBlocked) return validityBlocked;
     const moduleDenied = await moduleAccessDenied(event, "lsmwBomUpload");
     if (moduleDenied) return moduleDenied;
     const authorization = await requireSecuredProcessor(event);

@@ -48,18 +48,21 @@
           <button class="submodule-nav" data-view="administration" data-admin-section="moduleAccessPanel"><i>└</i> Module Access Control</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="userActivityPanel"><i>└</i> User Activity Summary</button>
           <button class="submodule-nav" data-view="administration" data-admin-section="trialManagementPanel"><i>└</i> Free Trial Management</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="validityManagementPanel"><i>└</i> Account Validity</button>
+          <button class="submodule-nav" data-view="administration" data-admin-section="supportInboxPanel"><i>└</i> Support Messages</button>
         </div>
         <button data-view="settings"><i>⚙</i> Settings</button>
       </nav>
       <div class="side-status hidden" id="sideStatus"><i></i><span><b>Checking LAN…</b><small id="sideUpdated">No local update</small></span></div>
       <div class="trial-status hidden" id="trialStatus"></div>
+      <div class="trial-status hidden" id="validityStatus"></div>
       <div class="profile"><button class="profile-photo" id="changeProfilePhoto" title="Change your profile photo"><span id="profileInitials">GU</span><img class="hidden" id="profileImage" alt="Profile"></button><div><b id="profileName">Guest User</b><small id="profileRole">Guest User</small><div class="profile-links"><button class="change-photo-button" id="changeProfilePhotoButton">Change Photo</button><button class="logout-button" id="logoutUser">Sign In / Create Account</button></div></div></div>
     </aside>
 
     <main>
       <header>
         <div><small>ZBOM</small><div class="page-title-row"><h1 id="pageTitle">Overview</h1><span class="header-last-updated hidden" id="headerLastUpdated">Last updated: <strong>Not updated yet</strong></span></div></div>
-        <div class="actions"><span class="preview-badge hidden" id="previewBadge">PREVIEW MODE · AUTO REFRESH</span><span class="connection" id="connection">● Checking</span><button class="secondary" id="openShare">Open Shared Folder</button><button class="secondary" id="reloadApp" title="Reload ZBOM Desktop Software (F5 / Ctrl+R)">↻ Reload App</button><button class="primary" id="updateNow">Update Now</button></div>
+        <div class="actions"><span class="preview-badge hidden" id="previewBadge">PREVIEW MODE · AUTO REFRESH</span><span class="connection" id="connection">● Checking</span><button class="secondary" id="reloadApp" title="Reload ZBOM Desktop Software (F5 / Ctrl+R)">↻ Reload App</button><button class="primary" id="updateNow">Update Now</button></div>
       </header>
       <div class="notice hidden" id="notice"></div>
       <div class="download-complete hidden" id="downloadComplete">
@@ -563,6 +566,36 @@
               <p class="module-access-note">The trial is stored on this computer only. Resetting or extending it here affects this computer's guest trial.</p>
             </div>
           </div>
+          <div class="panel main-admin-only" id="validityManagementPanel">
+            <div class="panel-title"><div><h3>Account Validity</h3><p>Every account is valid for 3 months from creation. When it ends, the user can still sign in, but cannot do file work until you renew the account. The Main Admin account never expires.</p></div><span class="role-chip">MAIN ADMIN ONLY</span></div>
+            <div class="admin-user-table-wrap"><table class="admin-user-table"><thead><tr><th>User</th><th>Role</th><th>Department</th><th>Created</th><th>Valid Until</th><th>Status</th></tr></thead><tbody id="validityUserTable"></tbody></table></div>
+            <div class="admin-form" style="margin-top:12px;">
+              <label>User<select id="validityUserSelect"></select></label>
+              <label>Renew for<select id="validityDuration"><option value="1">1 month</option><option value="2">2 months</option><option value="3" selected>3 months</option><option value="6">6 months</option><option value="12">12 months</option><option value="custom">Custom date</option></select></label>
+              <label id="validityCustomDateField" class="hidden">Custom expiry date<input type="date" id="validityCustomDate"></label>
+              <button type="button" class="primary" id="validityRenewBtn">Approve / Extend</button>
+              <p class="module-access-note">Renewing counts from the later of the current expiry and today, so renewing early does not waste the remaining days. A renewal also approves any pending recovery request for that user.</p>
+            </div>
+            <div class="module-access-audit">
+              <div class="panel-title"><div><h3>Pending Recovery Requests</h3><p>Users whose validity ended and asked for their account to be renewed.</p></div></div>
+              <div id="validityRequests"><p class="module-access-note">No pending recovery requests.</p></div>
+            </div>
+            <div class="module-access-audit">
+              <div class="panel-title"><div><h3>Validity Change History</h3><p>Every renewal, recovery request and decision, with the previous and new expiry dates.</p></div><span class="role-chip" id="validityAuditCount">0 CHANGES</span></div>
+              <div class="admin-user-table-wrap"><table class="department-file-table"><thead><tr><th>Date &amp; Time</th><th>Changed By</th><th>User</th><th>Action</th><th>Previous Expiry</th><th>New Expiry</th></tr></thead><tbody id="validityAuditTable"></tbody></table></div>
+            </div>
+          </div>
+          <div class="panel main-admin-only" id="supportInboxPanel">
+            <div class="panel-title"><div><h3>Support Messages</h3><p>Every user's support conversation. Open one to read it, reply, or change its status. Suggested replies come from verified ZBOM answers — review them before sending.</p></div><span class="role-chip" id="supportInboxCount">0 UNREAD</span></div>
+            <div class="user-activity-filters">
+              <input id="supportInboxSearch" placeholder="Search user, category or message…">
+              <button class="secondary" id="supportInboxRefresh">Refresh</button>
+            </div>
+            <div class="support-inbox-grid">
+              <div class="support-inbox-list" id="supportInboxList"></div>
+              <div class="support-inbox-detail" id="supportInboxDetail"><p class="module-access-note">Select a conversation to read it and reply.</p></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -577,10 +610,11 @@
           </div>
         </div>
         <div class="panel settings">
-          <div class="panel-title"><div><h3>Shared-folder connection</h3><p>Windows shared-folder permissions continue to control network access.</p></div></div>
-          <label>Network shared folder<div class="path-input"><input id="sharePath"><button class="secondary" id="browseFolder">Browse</button></div></label>
+          <div class="panel-title"><div><h3>Office network connection</h3><p>Windows shared-folder permissions continue to control network access.</p></div></div>
+          <p class="network-status-line" id="networkStatusLine">Office network: Checking…</p>
+          <p class="module-access-note">The office network location is managed by the app and is not shown here. Use Browse only if the Admin asks you to point the app at a different office folder.</p>
+          <div class="settings-actions"><button class="secondary" id="browseFolder">Browse</button><span class="module-access-note" id="networkFolderNote"></span><button class="secondary" id="reloadAppSettings">↻ Reload Software Window</button><button class="secondary" id="forceUpdate">Force full update</button><button class="primary" id="saveSettings">Save Settings</button></div>
           <label class="check"><input type="checkbox" id="autoUpdate" checked><span>Automatically check every 5 minutes while LAN is available</span></label>
-          <div class="settings-actions"><button class="secondary" id="reloadAppSettings">↻ Reload Software Window</button><button class="secondary" id="forceUpdate">Force full update</button><button class="primary" id="saveSettings">Save Settings</button></div>
         </div>
         <div class="panel software-admin main-admin-only">
           <div class="panel-title"><div><h3>Software Auto Update</h3><p>Main Admin publishes an approved installer; every ZBOM client detects it automatically.</p></div><span id="currentAppVersion">Current version</span></div>
@@ -595,6 +629,23 @@
       </section>
       <footer>ZBOM · Offline ERP Workspace</footer>
     </main>
+  </div>
+  <button type="button" class="support-fab" id="supportFab" title="Support — ask a question or report a problem">💬 Support <span class="support-badge hidden" id="supportBadge"></span></button>
+  <button type="button" class="review-fab" id="reviewFab" title="Review ZBOM — share your experience">★ Review</button>
+  <div class="support-panel hidden" id="supportPanel">
+    <div class="support-panel-head"><b>Support</b><span id="supportStatus">No conversation yet</span><button type="button" class="support-close" id="supportCloseBtn" title="Close">×</button></div>
+    <div class="support-messages" id="supportMessages"></div>
+    <div class="support-composer">
+      <label>Category<select id="supportCategory"><option>Problem</option><option>Bug Report</option><option>Suggestion</option><option>New Feature</option></select></label>
+      <textarea id="supportInput" placeholder="Describe your problem, bug report, suggestion or new feature request…" rows="3"></textarea>
+      <button type="button" class="primary" id="supportSendBtn">Send</button>
+    </div>
+  </div>
+  <div class="review-panel hidden" id="reviewPanel">
+    <div class="support-panel-head"><b>Review ZBOM</b><span>Only 4 or 5 stars — your honest experience</span><button type="button" class="support-close" id="reviewCloseBtn" title="Close">×</button></div>
+    <div class="review-summary" id="reviewSummary"></div>
+    <div class="review-list" id="reviewList"></div>
+    <div class="review-form" id="reviewForm"></div>
   </div>
   <div class="admin-login-overlay hidden" id="adminLoginOverlay">
     <div class="admin-login-card">
@@ -648,6 +699,24 @@
       <b>Your 7-Day Free Trial Has Expired!</b>
       <p>Create your FREE account to continue using ZBOM and access your files and features.</p>
       <div><button class="secondary" id="trialClose">Close</button><button class="primary" id="trialCreateAccount">Create Free Account</button></div>
+    </div>
+  </div>
+  <div class="admin-login-overlay hidden" id="validityExpiredOverlay">
+    <div class="admin-login-card">
+      <img class="login-logo" src="assets/zb-logo.png" alt="ZBOM logo">
+      <b>Your Account Validity Has Expired!</b>
+      <p>Your account validity has expired. Please request the Admin to renew your account access.</p>
+      <p class="validity-recovery-note hidden" id="validityRecoveryNote">Your recovery request was sent to the Admin. Your access will return after the Admin renews your account.</p>
+      <div><button class="secondary" id="validityCloseBtn">Close</button><button class="primary" id="validityRequestRecoveryBtn">Request Account Recovery</button></div>
+    </div>
+  </div>
+  <div class="admin-login-overlay hidden" id="networkUnavailableOverlay">
+    <div class="admin-login-card">
+      <img class="login-logo" src="assets/zb-logo.png" alt="ZBOM logo">
+      <b>Office Network Connection Not Available!</b>
+      <p>Please connect to the office network and try again. If you need assistance, please contact Support.</p>
+      <p class="network-support-name">If you need further assistance, please contact Zakaria Alam Mithu from Support.</p>
+      <div><button class="secondary" id="networkCloseBtn">Close</button><button class="primary" id="networkRetryBtn">Retry Connection</button></div>
     </div>
   </div>
   <div class="excel-filter-menu hidden" id="excelFilterMenu">

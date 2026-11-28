@@ -13,6 +13,18 @@ const state = {
   authenticated: false,
   trial: null,
   trialPopupShown: false,
+  validity: null,
+  validityPopupShown: false,
+  validityAdmin: null,
+  networkReachable: null,
+  networkOverlayShown: false,
+  supportConversation: null,
+  supportUnread: 0,
+  supportSelectedId: "",
+  supportInbox: null,
+  supportSuggestion: "",
+  reviewsData: null,
+  reviewsSelectedStars: 0,
   profileImageDataUrl: "",
   profileImagesByUser: {},
   codeRequirementPreview: { rows: [], file: "", sheetName: "" },
@@ -196,6 +208,524 @@ function ensureTrialForFileOp() {
   return false;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---- Account Validity (3-month default) + Recovery ----
+// A signed-in user whose account validity ended can still sign in, but
+// cannot do any file work until the Main Admin renews the account.
+// The Main Admin never expires; guests are covered by the free trial.
+async function refreshValidityStatus(showExpiredPopup = false) {
+  try {
+    const validity = await window.erp.getMyValidity();
+    if (!validity) return null;
+    state.validity = validity;
+    renderValidityStatus();
+    if (showExpiredPopup && state.authenticated && validity.hasAccount && validity.expired && !state.validityPopupShown) {
+      state.validityPopupShown = true;
+      showValidityExpiredPopup();
+    }
+    return validity;
+  } catch {
+    return null;
+  }
+}
+
+function validityAllowsFileOps() {
+  // Guests and the Main Admin are never validity-gated; a signed-in
+  // user is allowed while their account is valid.
+  if (!state.authenticated) return true;
+  if (!state.validity) return true; // validity not loaded yet — do not block
+  return state.validity.valid !== false;
+}
+
+function renderValidityStatus() {
+  const el = $("#validityStatus");
+  if (!el) return;
+  const v = state.validity;
+  if (!state.authenticated || !v || !v.hasAccount || v.isMainAdmin) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  if (v.expired) {
+    el.textContent = v.clockRollback
+      ? "Account expired — system date changed, request recovery"
+      : "Account expired — request recovery to continue";
+  } else if (v.daysLeft <= 7) {
+    el.textContent = `Account validity — ${v.daysLeft} day${v.daysLeft === 1 ? "" : "s"} left (until ${formatDate(v.validUntil)})`;
+  } else {
+    el.textContent = `Account valid until ${formatDate(v.validUntil)}`;
+  }
+}
+
+function showValidityExpiredPopup() {
+  const btn = $("#validityRequestRecoveryBtn");
+  if (btn) { btn.disabled = false; btn.textContent = "Request Account Recovery"; }
+  $("#validityRecoveryNote")?.classList.add("hidden");
+  $("#validityExpiredOverlay")?.classList.remove("hidden");
+}
+
+function hideValidityExpiredPopup() {
+  $("#validityExpiredOverlay")?.classList.add("hidden");
+}
+
+// Trial (guests) + validity (signed-in users) in one check, for every
+// client-side file operation (Production/Yarn upload or download).
+function ensureFileOpAllowed() {
+  if (!ensureTrialForFileOp()) return false;
+  if (!validityAllowsFileOps()) {
+    showValidityExpiredPopup();
+    return false;
+  }
+  return true;
+}
+
+async function requestAccountRecovery() {
+  const btn = $("#validityRequestRecoveryBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    const result = await window.erp.requestAccountRecovery();
+    if (!result || !result.ok) {
+      showNotice(result?.message || "The recovery request could not be sent.", "warning");
+      return;
+    }
+    $("#validityRecoveryNote")?.classList.remove("hidden");
+    if (btn) btn.textContent = "Request Sent";
+    showNotice(result.message || "Your recovery request was sent to the Admin.", "success");
+  } catch (error) {
+    showNotice(`The recovery request could not be sent: ${error.message}`, "warning");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Main Admin panel: account validity, renewal, recovery requests, history.
+let validityPanelLoaded = false;
+async function loadValidityPanel(force = false) {
+  if (!force && validityPanelLoaded) return;
+  if (typeof window.erp?.getAccountValidity !== "function") return;
+  try {
+    const result = await window.erp.getAccountValidity();
+    if (!result || !result.ok) return;
+    state.validityAdmin = result;
+    validityPanelLoaded = true;
+    renderValidityPanel();
+  } catch (e) {}
+}
+
+function renderValidityPanel() {
+  const panel = $("#validityManagementPanel");
+  if (!panel || state.access.role !== "main_admin") return;
+  const data = state.validityAdmin || { users: [], requests: [], audit: [] };
+  const tbody = $("#validityUserTable");
+  if (tbody) {
+    tbody.innerHTML = (data.users || []).map((u) => {
+      const status = !u.active ? "Inactive" : u.expired ? "Expired" : u.daysLeft <= 7 ? `Expiring (${u.daysLeft}d left)` : "Active";
+      return `<tr><td>${escapeHtml(u.fullName || "")}<br><small>${escapeHtml(u.employeeId || "")}</small></td>`
+        + `<td>${escapeHtml(u.role || "")}</td><td>${escapeHtml(u.department || "")}</td>`
+        + `<td>${u.createdAt ? formatDate(u.createdAt) : "Not recorded"}</td>`
+        + `<td>${u.validUntil ? formatDate(u.validUntil) : "—"}</td>`
+        + `<td>${status}${u.clockRollback ? " · date changed" : ""}</td></tr>`;
+    }).join("") || `<tr><td colspan="6">No user accounts yet.</td></tr>`;
+  }
+  const select = $("#validityUserSelect");
+  if (select) {
+    const current = select.value;
+    select.innerHTML = (data.users || []).filter((u) => u.active !== false).map((u) =>
+      `<option value="${escapeHtml(u.employeeId)}">${escapeHtml(u.fullName || u.employeeId)} (${escapeHtml(u.employeeId)})${u.expired ? " — expired" : ""}</option>`).join("");
+    if (current && [...select.options].some((o) => o.value === current)) select.value = current;
+  }
+  const reqList = $("#validityRequests");
+  if (reqList) {
+    const pending = (data.requests || []).filter((r) => r.status === "pending");
+    reqList.innerHTML = pending.length ? pending.map((r) =>
+      `<div class="validity-request"><div><b>${escapeHtml(r.fullName || r.employeeId)}</b> <small>(${escapeHtml(r.employeeId)})</small><br>`
+      + `<small>Requested ${formatDate(r.requestedAt)} · was valid until ${r.previousValidUntil ? formatDate(r.previousValidUntil) : "—"}</small></div>`
+      + `<div><button class="secondary" data-recovery-approve="${escapeHtml(r.id)}">Approve &amp; Renew</button> <button class="secondary" data-recovery-reject="${escapeHtml(r.id)}">Reject</button></div></div>`).join("")
+      : `<p class="module-access-note">No pending recovery requests.</p>`;
+  }
+  const auditBody = $("#validityAuditTable");
+  if (auditBody) {
+    auditBody.innerHTML = (data.audit || []).slice(0, 100).map((a) =>
+      `<tr><td>${formatDate(a.at)}</td><td>${escapeHtml(a.byName || a.by || "")}</td><td>${escapeHtml(a.employeeId || "")}</td>`
+      + `<td>${escapeHtml(a.action || "")}</td><td>${a.previousValidUntil ? formatDate(a.previousValidUntil) : "—"}</td>`
+      + `<td>${a.newValidUntil ? formatDate(a.newValidUntil) : "—"}</td></tr>`).join("")
+      || `<tr><td colspan="6">No validity changes recorded yet.</td></tr>`;
+  }
+  const count = $("#validityAuditCount");
+  if (count) count.textContent = `${(data.audit || []).length} CHANGES`;
+}
+
+function validityRenewalPayload() {
+  const employeeId = $("#validityUserSelect")?.value || "";
+  const duration = $("#validityDuration")?.value || "3";
+  const customDate = $("#validityCustomDate")?.value || "";
+  if (!employeeId) return { error: "Choose a user first." };
+  if (duration === "custom") {
+    if (!customDate) return { error: "Choose a custom expiry date." };
+    return { employeeId, customDate: new Date(`${customDate}T23:59:59`).toISOString() };
+  }
+  return { employeeId, months: Number(duration) };
+}
+
+async function renewSelectedAccount() {
+  const payload = validityRenewalPayload();
+  if (payload.error) { showNotice(payload.error, "warning"); return; }
+  const btn = $("#validityRenewBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Renewing…"; }
+  try {
+    const result = await window.erp.renewAccount(payload);
+    if (!result || !result.ok) { showNotice(result?.message || "The account could not be renewed.", "warning"); return; }
+    showNotice(result.message || "Account renewed.", "success");
+    validityPanelLoaded = false;
+    await loadValidityPanel(true);
+  } catch (error) {
+    showNotice(`The account could not be renewed: ${error.message}`, "warning");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Approve / Extend"; }
+  }
+}
+
+async function respondRecoveryRequest(requestId, approved) {
+  const payload = { requestId, approved };
+  if (approved) {
+    const renewal = validityRenewalPayload();
+    if (renewal.error) { showNotice(`${renewal.error} (renewal period above).`, "warning"); return; }
+    payload.months = renewal.months;
+    payload.customDate = renewal.customDate;
+  }
+  try {
+    const result = await window.erp.respondRecoveryRequest(payload);
+    if (!result || !result.ok) { showNotice(result?.message || "The request could not be answered.", "warning"); return; }
+    showNotice(result.message || "Done.", "success");
+    validityPanelLoaded = false;
+    await loadValidityPanel(true);
+  } catch (error) {
+    showNotice(`The request could not be answered: ${error.message}`, "warning");
+  }
+}
+
+// ---- Office Network Connection Validation ----
+// ZBOM works from the office network. When it is not reachable, a
+// professional message is shown (never the network location itself).
+async function refreshNetworkStatus(showOverlay = false) {
+  try {
+    const result = await window.erp.getNetworkStatus();
+    if (!result) return null;
+    const wasReachable = state.networkReachable;
+    state.networkReachable = result.reachable === true;
+    setConnection(state.networkReachable);
+    const statusEl = $("#networkStatusLine");
+    if (statusEl) {
+      statusEl.textContent = state.networkReachable
+        ? "Office network: Connected"
+        : "Office network: Not connected";
+      statusEl.className = state.networkReachable ? "network-status-line ok" : "network-status-line bad";
+    }
+    if (!state.networkReachable) {
+      if (showOverlay || wasReachable === true) showNetworkOverlay();
+    } else if (state.networkOverlayShown) {
+      hideNetworkOverlay();
+      if (wasReachable === false) showNotice("Office network is available again.", "success");
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+function showNetworkOverlay() {
+  state.networkOverlayShown = true;
+  $("#networkUnavailableOverlay")?.classList.remove("hidden");
+}
+
+function hideNetworkOverlay() {
+  state.networkOverlayShown = false;
+  $("#networkUnavailableOverlay")?.classList.add("hidden");
+}
+
+// ---- Support Chat ----
+// A persistent Support button (bottom-right) opens a chat window. The
+// user writes a problem, bug report, suggestion or feature request; the
+// Main Admin answers from the Support Messages inbox. Guests chat as
+// "Guest" from this computer.
+function toggleSupportPanel() {
+  const panel = $("#supportPanel");
+  if (!panel) return;
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !opening);
+  if (opening) loadSupportConversation();
+}
+
+async function loadSupportConversation() {
+  try {
+    const result = await window.erp.getSupportConversation({ markRead: true });
+    if (!result || !result.ok) return;
+    state.supportConversation = result.conversation || null;
+    state.supportUnread = result.unreadUser || 0;
+    renderSupportConversation();
+    renderSupportBadge();
+  } catch {}
+}
+
+function renderSupportConversation() {
+  const list = $("#supportMessages");
+  const statusEl = $("#supportStatus");
+  const conv = state.supportConversation;
+  if (statusEl) {
+    statusEl.textContent = conv
+      ? `Status: ${({ new: "New", pending: "Pending", in_progress: "In Progress", resolved: "Resolved" })[conv.status] || conv.status}`
+      : "No conversation yet — write your first message below.";
+  }
+  if (!list) return;
+  if (!conv || !conv.messages.length) {
+    list.innerHTML = `<div class="support-empty">Describe your problem, bug report, suggestion or new feature request. Support will reply here.</div>`;
+    return;
+  }
+  list.innerHTML = conv.messages.map((m) => {
+    const mine = m.from === "user";
+    return `<div class="support-message ${mine ? "mine" : "theirs"}"><div class="support-message-body">${escapeHtml(m.text || "")}</div><small>${escapeHtml(m.authorName || "")} · ${formatDate(m.at)}</small></div>`;
+  }).join("");
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderSupportBadge() {
+  const badge = $("#supportBadge");
+  if (!badge) return;
+  const n = state.supportUnread || 0;
+  badge.textContent = n > 0 ? String(n) : "";
+  badge.classList.toggle("hidden", n <= 0);
+}
+
+async function refreshSupportBadge() {
+  try {
+    const result = await window.erp.getSupportConversation();
+    if (!result || !result.ok) return;
+    const unread = result.unreadUser || 0;
+    if (unread !== state.supportUnread) {
+      state.supportUnread = unread;
+      if (result.conversation) state.supportConversation = result.conversation;
+      renderSupportBadge();
+      if (!$("#supportPanel")?.classList.contains("hidden")) renderSupportConversation();
+    }
+  } catch {}
+}
+
+async function sendSupportMessage() {
+  const input = $("#supportInput");
+  const category = $("#supportCategory")?.value || "Problem";
+  const text = (input?.value || "").trim();
+  if (!text) { showNotice("Write a message first.", "warning"); return; }
+  const btn = $("#supportSendBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    const result = await window.erp.sendSupportMessage({ text, category, module: state.view || "" });
+    if (!result || !result.ok) { showNotice(result?.message || "The message could not be sent.", "warning"); return; }
+    if (input) input.value = "";
+    state.supportConversation = result.conversation || state.supportConversation;
+    renderSupportConversation();
+    showNotice(result.message || "Your message was sent to Support.", "success");
+  } catch (error) {
+    showNotice(`The message could not be sent: ${error.message}`, "warning");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Send"; }
+  }
+}
+
+// Main Admin panel: Support Messages inbox.
+let supportInboxLoaded = false;
+async function loadSupportInboxPanel(force = false) {
+  if (!force && supportInboxLoaded) return;
+  if (typeof window.erp?.getSupportInbox !== "function") return;
+  try {
+    const result = await window.erp.getSupportInbox({ conversationId: state.supportSelectedId || "" });
+    if (!result || !result.ok) return;
+    state.supportInbox = result;
+    supportInboxLoaded = true;
+    renderSupportInbox();
+  } catch (e) {}
+}
+
+function renderSupportInbox() {
+  const panel = $("#supportInboxPanel");
+  if (!panel || state.access.role !== "main_admin") return;
+  const data = state.supportInbox || { conversations: [], selected: null, totalUnread: 0 };
+  const count = $("#supportInboxCount");
+  if (count) count.textContent = `${data.totalUnread || 0} UNREAD`;
+  const search = ($("#supportInboxSearch")?.value || "").trim().toLowerCase();
+  const list = $("#supportInboxList");
+  if (list) {
+    const filtered = (data.conversations || []).filter((c) => {
+      if (!search) return true;
+      return `${c.userName} ${c.userId} ${c.category} ${c.module} ${c.lastMessage}`.toLowerCase().includes(search);
+    });
+    list.innerHTML = filtered.length ? filtered.map((c) =>
+      `<div class="support-inbox-row ${c.id === state.supportSelectedId ? "selected" : ""}" data-support-open="${escapeHtml(c.id)}">`
+      + `<div><b>${escapeHtml(c.userName || "")}</b> <small>(${escapeHtml(c.userId || "")})</small>${c.unreadAdmin ? ` <span class="support-unread-count">${c.unreadAdmin} new</span>` : ""}<br>`
+      + `<small>${escapeHtml(c.category || "")} · ${escapeHtml(c.module || "")} · ${formatDate(c.updatedAt)}</small><br>`
+      + `<small>${escapeHtml(c.lastMessage || "")}</small></div>`
+      + `<span class="support-status-chip ${c.status}">${c.status.replace("_", " ")}</span></div>`).join("")
+      : `<p class="module-access-note">No support messages yet.</p>`;
+  }
+  const detail = $("#supportInboxDetail");
+  if (detail) {
+    const sel = data.selected;
+    if (!sel) {
+      detail.innerHTML = `<p class="module-access-note">Select a conversation to read it and reply.</p>`;
+    } else {
+      detail.innerHTML = `<div class="support-inbox-messages">` + sel.messages.map((m) =>
+        `<div class="support-message ${m.from === "admin" ? "mine" : "theirs"}"><div class="support-message-body">${escapeHtml(m.text || "")}</div><small>${escapeHtml(m.authorName || "")} · ${formatDate(m.at)}</small></div>`).join("") + `</div>`
+        + `<div class="support-suggestion" id="supportSuggestionBox"><p class="module-access-note">Loading a suggested reply…</p></div>`
+        + `<div class="support-reply-row"><textarea id="supportReplyInput" placeholder="Write your reply…" rows="3"></textarea></div>`
+        + `<div class="support-reply-actions"><select id="supportStatusSelect">${["new", "pending", "in_progress", "resolved"].map((s) => `<option value="${s}" ${sel.status === s ? "selected" : ""}>${s.replace("_", " ")}</option>`).join("")}</select><button class="secondary" id="supportStatusBtn">Set Status</button><button class="primary" id="supportReplyBtn">Send Reply</button></div>`;
+      loadSupportSuggestion(sel.id);
+    }
+  }
+}
+
+async function loadSupportSuggestion(conversationId) {
+  const box = $("#supportSuggestionBox");
+  if (!box) return;
+  try {
+    const result = await window.erp.getSupportSuggestion({ conversationId });
+    if (!result || !result.ok) { box.innerHTML = `<p class="module-access-note">No suggestion available.</p>`; return; }
+    if (!result.matched) {
+      state.supportSuggestion = "";
+      box.innerHTML = `<p class="module-access-note"><b>AI suggestion:</b> ${escapeHtml(result.reason || "No matching known issue — please reply yourself.")}</p>`;
+      return;
+    }
+    state.supportSuggestion = result.suggestion || "";
+    box.innerHTML = `<p><b>AI suggested reply</b> <small>(${escapeHtml(result.topic || "")} · confidence ${escapeHtml(result.confidence || "low")})</small></p>`
+      + `<p>${escapeHtml(result.suggestion || "")}</p>`
+      + `<p class="module-access-note">${escapeHtml(result.note || "")}</p>`
+      + `<button class="secondary" id="supportUseSuggestionBtn">Use Suggestion</button>`;
+  } catch {
+    box.innerHTML = `<p class="module-access-note">No suggestion available.</p>`;
+  }
+}
+
+async function replySupportMessage() {
+  const conversationId = state.supportSelectedId || "";
+  const text = ($("#supportReplyInput")?.value || "").trim();
+  if (!conversationId) { showNotice("Select a conversation first.", "warning"); return; }
+  if (!text) { showNotice("Write a reply first.", "warning"); return; }
+  const btn = $("#supportReplyBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    const result = await window.erp.replySupportMessage({ conversationId, text });
+    if (!result || !result.ok) { showNotice(result?.message || "The reply could not be sent.", "warning"); return; }
+    showNotice(result.message || "Your reply was sent.", "success");
+    supportInboxLoaded = false;
+    await loadSupportInboxPanel(true);
+  } catch (error) {
+    showNotice(`The reply could not be sent: ${error.message}`, "warning");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Send Reply"; }
+  }
+}
+
+async function setSupportStatus() {
+  const conversationId = state.supportSelectedId || "";
+  const status = $("#supportStatusSelect")?.value || "";
+  if (!conversationId) { showNotice("Select a conversation first.", "warning"); return; }
+  try {
+    const result = await window.erp.setSupportStatus({ conversationId, status });
+    if (!result || !result.ok) { showNotice(result?.message || "The status could not be changed.", "warning"); return; }
+    showNotice("Status updated.", "success");
+    supportInboxLoaded = false;
+    await loadSupportInboxPanel(true);
+  } catch (error) {
+    showNotice(`The status could not be changed: ${error.message}`, "warning");
+  }
+}
+
+// ---- Genuine User Reviews (4 or 5 stars only) ----
+function toggleReviewPanel() {
+  const panel = $("#reviewPanel");
+  if (!panel) return;
+  const opening = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !opening);
+  if (opening) loadReviewsPanel();
+}
+
+async function loadReviewsPanel() {
+  try {
+    const result = await window.erp.getReviews();
+    if (!result || !result.ok) return;
+    state.reviewsData = result;
+    renderReviewsPanel();
+  } catch {}
+}
+
+function renderReviewsPanel() {
+  const data = state.reviewsData || { reviews: [], own: null, summary: { four: 0, five: 0, total: 0, average: 0 }, signedIn: false };
+  const summaryEl = $("#reviewSummary");
+  if (summaryEl) {
+    const s = data.summary || { four: 0, five: 0, total: 0, average: 0 };
+    summaryEl.innerHTML = `<b>${s.total} review${s.total === 1 ? "" : "s"}</b> · ⭐⭐⭐⭐ ${s.four} · ⭐⭐⭐⭐⭐ ${s.five}${s.total ? ` · average ${s.average}` : ""}`;
+  }
+  const list = $("#reviewList");
+  const isAdmin = state.access.role === "main_admin";
+  if (list) {
+    const rows = isAdmin && data.all ? data.all : data.reviews;
+    list.innerHTML = (rows || []).length ? (rows || []).map((r) => {
+      const stars = "⭐".repeat(r.stars || 5);
+      const controls = isAdmin
+        ? `<div class="review-controls"><button class="secondary" data-review-hide="${r.id}" ${r.hidden ? "disabled" : ""}>Hide</button><button class="secondary" data-review-unhide="${r.id}" ${!r.hidden || r.removed ? "disabled" : ""}>Unhide</button><button class="secondary" data-review-remove="${r.id}" ${r.removed ? "disabled" : ""}>Remove</button></div>`
+        : "";
+      const flags = `${r.hidden ? " · hidden" : ""}${r.removed ? " · removed" : ""}`;
+      return `<article class="review-item"><div class="review-stars">${stars}</div><p>${escapeHtml(r.comment || "")}</p><small>${escapeHtml(r.userName || "")} · ${formatDate(r.createdAt)}${r.updatedAt && r.updatedAt !== r.createdAt ? ` · updated ${formatDate(r.updatedAt)}` : ""}${flags}</small>${controls}</article>`;
+    }).join("") : `<p class="module-access-note">No reviews yet — be the first to share your experience.</p>`;
+  }
+  const form = $("#reviewForm");
+  if (form) {
+    if (!data.signedIn) {
+      form.innerHTML = `<p class="module-access-note">Please sign in to leave a review.</p><button class="primary" id="reviewSignInBtn">Sign In</button>`;
+    } else {
+      const own = data.own;
+      const stars = state.reviewsSelectedStars || own?.stars || 0;
+      form.innerHTML = `<p><b>${own ? "Your review (update it below)" : "Leave a review"}</b></p>`
+        + `<div class="review-stars-select"><button type="button" class="review-star-btn ${stars === 4 ? "selected" : ""}" data-review-stars="4">⭐⭐⭐⭐<small>4 stars</small></button><button type="button" class="review-star-btn ${stars === 5 ? "selected" : ""}" data-review-stars="5">⭐⭐⭐⭐⭐<small>5 stars</small></button></div>`
+        + `<textarea id="reviewComment" placeholder="Write about your experience with ZBOM…" rows="3">${own ? escapeHtml(own.comment || "") : ""}</textarea>`
+        + `<button class="primary" id="reviewSubmitBtn">${own ? "Update Review" : "Submit Review"}</button>`;
+    }
+  }
+}
+
+async function submitReview() {
+  const stars = state.reviewsSelectedStars || state.reviewsData?.own?.stars || 0;
+  const comment = ($("#reviewComment")?.value || "").trim();
+  if (![4, 5].includes(stars)) { showNotice("Please choose 4 stars or 5 stars.", "warning"); return; }
+  if (!comment) { showNotice("Write a short comment about your experience.", "warning"); return; }
+  const btn = $("#reviewSubmitBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  try {
+    const result = await window.erp.submitReview({ stars, comment });
+    if (!result || !result.ok) { showNotice(result?.message || "The review could not be saved.", "warning"); return; }
+    state.reviewsSelectedStars = 0;
+    showNotice(result.message || "Thank you — your review was saved.", "success");
+    await loadReviewsPanel();
+  } catch (error) {
+    showNotice(`The review could not be saved: ${error.message}`, "warning");
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+async function moderateReview(reviewId, action) {
+  try {
+    const result = await window.erp.moderateReview({ reviewId, action });
+    if (!result || !result.ok) { showNotice(result?.message || "The review could not be moderated.", "warning"); return; }
+    showNotice(result.message || "Done.", "success");
+    await loadReviewsPanel();
+  } catch (error) {
+    showNotice(`The review could not be moderated: ${error.message}`, "warning");
+  }
+}
+
 // ---- Download progress / completion (main process reports via will-download) ----
 // After a file downloads, the user gets a success message with an "Open File"
 // button on the same page; a failed download shows an error and the
@@ -226,6 +756,11 @@ function wireDownloadListeners() {
   window.erp.onDownloadBlockedTrial(() => {
     showTrialExpiredPopup();
   });
+  if (typeof window.erp.onDownloadBlockedValidity === "function") {
+    window.erp.onDownloadBlockedValidity(() => {
+      showValidityExpiredPopup();
+    });
+  }
 }
 
 function formatDate(value) {
@@ -1923,7 +2458,7 @@ async function prodDownloadBlob(blob, filename) {
 }
 function prodXlsxMime() { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; }
 function prodDownloadTemplate() {
-  if (!ensureTrialForFileOp()) return;
+  if (!ensureFileOpAllowed()) return;
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const wb = window.XLSX.utils.book_new();
   // The template follows the user's file layout, yarns first:
@@ -1969,7 +2504,7 @@ function prodDownloadTemplate() {
   prodDownloadBlob(new Blob([buf], { type: prodXlsxMime() }), "ZBOM-Production-Template.xlsx");
 }
 function prodExportExcel() {
-  if (!ensureTrialForFileOp()) return;
+  if (!ensureFileOpAllowed()) return;
   if (!window.XLSX) { showNotice("Excel support is not available in this version.", "warning"); return; }
   const rows = prodRows();
   if (!rows.length) { showNotice("There are no machines to download for this fabric.", "warning"); return; }
@@ -2302,7 +2837,7 @@ function prodProblemsHtml(problems) {
   return `<ul class="prod-import-problems">` + shown.map((p) => `<li>Row ${p.row}: ${prodEsc(p.message)}</li>`).join("") + `</ul>` + (more > 0 ? `<p class="prod-import-warn">…and ${more} more problem rows.</p>` : "");
 }
 async function prodHandleUpload(file) {
-  if (!ensureTrialForFileOp()) return;
+  if (!ensureFileOpAllowed()) return;
   const report = $("#prodImportReport");
   const quickReport = $("#prodQuickReport");
   const setReport = (html) => { if (report) report.innerHTML = html; if (quickReport) quickReport.innerHTML = html; };
@@ -2800,7 +3335,7 @@ async function fleeceDownloadBlob(blob, filename) {
 }
 function fleeceXlsxMime() { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; }
 function fleeceDownloadExcel() {
-  if (!ensureTrialForFileOp()) return;
+  if (!ensureFileOpAllowed()) return;
   const note = document.getElementById("fleeceCopyNote");
   if (!window.XLSX) {
     if (note) note.textContent = "Excel support is not available in this version.";
@@ -2941,7 +3476,7 @@ function fleeceUploadProblemsHtml(problems) {
   return `<ul class="fleece-upload-problems">` + shown.map((p) => `<li>Row ${p.row}: ${fleeceEsc(p.message)}</li>`).join("") + `</ul>` + (more > 0 ? `<p class="fleece-upload-warn">…and ${more} more problem rows.</p>` : "");
 }
 async function fleeceHandleUpload(file) {
-  if (!ensureTrialForFileOp()) return;
+  if (!ensureFileOpAllowed()) return;
   const report = document.getElementById("fleeceExcelReport");
   const setReport = (html) => { if (report) report.innerHTML = html; };
   if (!file) return;
@@ -4366,9 +4901,6 @@ function renderAccess() {
   if ($("#zkngAdminMaster")) {
     $("#zkngAdminMaster").classList.toggle("hidden", !isFullAdmin);
   }
-  if ($("#openShare")) {
-    $("#openShare").classList.toggle("hidden", !isFullAdmin);
-  }
   $$('nav button[data-view], .submodule-nav').forEach((button) => {
     button.classList.remove("hidden");
   });
@@ -4443,6 +4975,8 @@ function renderAccess() {
   }
   if (isMainAdmin) loadModuleAccessPanel();
   if (isMainAdmin) loadUserActivityPanel();
+  if (isMainAdmin) loadValidityPanel();
+  if (isMainAdmin) loadSupportInboxPanel();
   renderSubAdmins();
   renderDepartmentFiles();
   if (isFullAdmin) renderPasswordAccounts();
@@ -4897,6 +5431,12 @@ async function refreshAccess() {
   // Keep the free-trial status current after sign-in / sign-out, so the
   // trial line and the file-operation gate follow the signed-in state.
   refreshTrialStatus().catch(() => {});
+  // Same for account validity: the sidebar line and the file-operation
+  // gate follow the signed-in account.
+  refreshValidityStatus().catch(() => {});
+  // Same for support replies: the badge must follow the signed-in
+  // account at once, not wait for the 60-second poll.
+  refreshSupportBadge().catch(() => {});
 }
 
 async function checkSoftwareUpdate(silent = true) {
@@ -5072,7 +5612,6 @@ async function initialize() {
     state.codeRequirementPreview = initial.codeRequirementPreview || state.codeRequirementPreview;
     state.moduleAccess = initial.moduleAccess || state.moduleAccess || {};
     if ($("#currentAppVersion")) $("#currentAppVersion").textContent = `Current version ${initial.appVersion || "1.0.0"}`;
-    if ($("#sharePath")) $("#sharePath").value = initial.config?.sharePath || "";
     if ($("#autoUpdate")) $("#autoUpdate").checked = initial.config?.autoUpdate !== false;
 
     renderAccess();
@@ -5087,12 +5626,21 @@ async function initialize() {
   // Free-trial status for this computer (guests only) + download events.
   wireDownloadListeners();
   refreshTrialStatus(true).catch(() => {});
+  // Account validity for the signed-in user (expired accounts see the
+  // recovery notice) + office-network check at startup.
+  refreshValidityStatus(true).catch(() => {});
+  refreshNetworkStatus(true).catch(() => {});
+  refreshSupportBadge().catch(() => {});
 
   window.setInterval(() => {
     if ($("#autoUpdate")?.checked) {
       updateData(false, true).catch(() => {});
       checkSoftwareUpdate(true).catch(() => {});
     }
+    // Re-validate the office network and look for new support replies
+    // even when automatic updates are off.
+    refreshNetworkStatus().catch(() => {});
+    refreshSupportBadge().catch(() => {});
   }, 60 * 1000);
 }
 
@@ -5151,6 +5699,16 @@ async function confirmAdminLogin() {
   // Instant UI state update on the spot (0.00ms delay!)
   state.authenticated = true;
   if (result.access) state.access = result.access;
+  // An expired account still signs in, but cannot do file work until
+  // the Main Admin renews it — show the expiry notice now.
+  if (result.validity) {
+    state.validity = result.validity;
+    renderValidityStatus();
+    if (result.validity.hasAccount && result.validity.expired) {
+      state.validityPopupShown = true;
+      showValidityExpiredPopup();
+    }
+  }
   $("#adminLoginOverlay").classList.add("hidden");
   $("#adminLoginError").classList.add("hidden");
   renderAccess();
@@ -5744,17 +6302,26 @@ $("#finishTypeSearch")?.addEventListener("input", debounce(() => refreshFiltered
 $("#updateNow")?.addEventListener("click", updateEverything);
 $("#forceUpdate")?.addEventListener("click", () => updateData(true));
 $("#browseFolder")?.addEventListener("click", async () => {
+  // The folder is chosen in the system picker and stored without ever
+  // showing its network location in the app.
   const folder = await window.erp.chooseFolder();
-  if (folder) $("#sharePath").value = folder;
+  if (folder) {
+    state.pendingSharePath = folder;
+    const note = $("#networkFolderNote");
+    if (note) note.textContent = "A new folder was chosen — press Save Settings to use it.";
+  }
 });
 $("#saveSettings")?.addEventListener("click", async () => {
   state.config = await window.erp.saveSettings({
-    sharePath: $("#sharePath").value.trim(),
+    sharePath: state.pendingSharePath || state.config.sharePath,
     autoUpdate: $("#autoUpdate").checked,
   });
+  state.pendingSharePath = "";
+  const note = $("#networkFolderNote");
+  if (note) note.textContent = "";
   showNotice("Settings saved on this computer.", "success");
+  refreshNetworkStatus().catch(() => {});
 });
-$("#openShare")?.addEventListener("click", () => window.erp.openPath($("#sharePath").value.trim()));
 $("#openDownloadedFile")?.addEventListener("click", () => {
   if (state.lastDownloadedFile) window.erp.openPath(state.lastDownloadedFile);
   $("#downloadComplete").classList.add("hidden");
@@ -5987,6 +6554,77 @@ $("#trialExtendBtn")?.addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+// Account validity: expiry notice + Main Admin renewal panel.
+$("#validityCloseBtn")?.addEventListener("click", hideValidityExpiredPopup);
+$("#validityRequestRecoveryBtn")?.addEventListener("click", requestAccountRecovery);
+$("#validityDuration")?.addEventListener("change", () => {
+  $("#validityCustomDateField")?.classList.toggle("hidden", $("#validityDuration")?.value !== "custom");
+});
+$("#validityRenewBtn")?.addEventListener("click", renewSelectedAccount);
+$("#validityRequests")?.addEventListener("click", (event) => {
+  const approveBtn = event.target.closest("[data-recovery-approve]");
+  const rejectBtn = event.target.closest("[data-recovery-reject]");
+  if (approveBtn) respondRecoveryRequest(approveBtn.dataset.recoveryApprove, true);
+  else if (rejectBtn) respondRecoveryRequest(rejectBtn.dataset.recoveryReject, false);
+});
+// Office network: retry the connection check, or dismiss the message.
+$("#networkRetryBtn")?.addEventListener("click", async () => {
+  const btn = $("#networkRetryBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+  try {
+    const result = await refreshNetworkStatus(true);
+    if (result?.reachable) showNotice("Office network is available.", "success");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Retry Connection"; }
+  }
+});
+$("#networkCloseBtn")?.addEventListener("click", hideNetworkOverlay);
+// Support chat: floating button, send, and the Admin inbox.
+$("#supportFab")?.addEventListener("click", toggleSupportPanel);
+$("#supportCloseBtn")?.addEventListener("click", toggleSupportPanel);
+$("#supportSendBtn")?.addEventListener("click", sendSupportMessage);
+$("#supportInput")?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendSupportMessage(); }
+});
+$("#supportInboxSearch")?.addEventListener("input", debounce(() => renderSupportInbox(), 200));
+$("#supportInboxRefresh")?.addEventListener("click", () => { state.supportInboxLoaded = false; loadSupportInboxPanel(true); });
+$("#supportInboxList")?.addEventListener("click", (event) => {
+  const row = event.target.closest("[data-support-open]");
+  if (!row) return;
+  state.supportSelectedId = row.dataset.supportOpen;
+  supportInboxLoaded = false;
+  loadSupportInboxPanel(true);
+});
+$("#supportInboxDetail")?.addEventListener("click", (event) => {
+  if (event.target.closest("#supportUseSuggestionBtn")) {
+    const input = $("#supportReplyInput");
+    if (input && state.supportSuggestion) { input.value = state.supportSuggestion; input.focus(); }
+    return;
+  }
+  if (event.target.closest("#supportReplyBtn")) replySupportMessage();
+  else if (event.target.closest("#supportStatusBtn")) setSupportStatus();
+});
+// User reviews: floating button, star choice, submit, Admin moderation.
+$("#reviewFab")?.addEventListener("click", toggleReviewPanel);
+$("#reviewCloseBtn")?.addEventListener("click", toggleReviewPanel);
+$("#reviewForm")?.addEventListener("click", (event) => {
+  const starBtn = event.target.closest("[data-review-stars]");
+  if (starBtn) {
+    state.reviewsSelectedStars = Number(starBtn.dataset.reviewStars);
+    $$(".review-star-btn").forEach((b) => b.classList.toggle("selected", Number(b.dataset.reviewStars) === state.reviewsSelectedStars));
+    return;
+  }
+  if (event.target.closest("#reviewSubmitBtn")) submitReview();
+  else if (event.target.closest("#reviewSignInBtn")) { toggleReviewPanel(); openAdminLogin(); }
+});
+$("#reviewList")?.addEventListener("click", (event) => {
+  const hideBtn = event.target.closest("[data-review-hide]");
+  const unhideBtn = event.target.closest("[data-review-unhide]");
+  const removeBtn = event.target.closest("[data-review-remove]");
+  if (hideBtn) moderateReview(hideBtn.dataset.reviewHide, "hide");
+  else if (unhideBtn) moderateReview(unhideBtn.dataset.reviewUnhide, "unhide");
+  else if (removeBtn) moderateReview(removeBtn.dataset.reviewRemove, "remove");
+});
 $("#cancelAdminLogin")?.addEventListener("click", () => $("#adminLoginOverlay").classList.add("hidden"));
 $("#cancelAccessRestricted")?.addEventListener("click", () => $("#accessRestrictedOverlay").classList.add("hidden"));
 $("#goToLoginFromRestricted")?.addEventListener("click", () => {
@@ -6084,6 +6722,9 @@ async function performLogoutAndSwitchUser() {
   };
   state.profileImageDataUrl = "";
   state.logoutCompletedAt = Date.now();
+  state.validity = null;
+  state.validityPopupShown = false;
+  hideValidityExpiredPopup();
   renderAccess();
   changeView("dashboard");
   $("#adminLoginOverlay")?.classList.add("hidden");
@@ -6091,6 +6732,7 @@ async function performLogoutAndSwitchUser() {
   // Refresh the trial status for the guest who is now using the app, so
   // the trial line and the file-operation gate use the current record.
   refreshTrialStatus().catch(() => {});
+  refreshValidityStatus().catch(() => {});
   if (window.erp && typeof window.erp.logout === "function") {
     window.erp.logout().catch((err) => console.warn("Background logout error:", err));
   }
